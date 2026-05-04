@@ -6,6 +6,9 @@ pub enum VolitionError {
         need: usize,
         got: usize,
     },
+    IoErr {
+        src: std::io::Error,
+    },
     UnexpectedValue {
         field: &'static str,
         expected: i32,
@@ -25,6 +28,7 @@ impl std::fmt::Display for VolitionError {
 
         match self {
             BufferTooSmall { need, got } => write!(f, "Not enough bytes: need {need}, got {got}"),
+            IoErr { src } => src.fmt(f),
             UnexpectedValue {
                 field,
                 expected,
@@ -46,5 +50,11 @@ impl std::fmt::Display for VolitionError {
             ),
             PackfileCompression => write!(f, "Packfile compression not yet supported"),
         }
+    }
+}
+
+impl From<std::io::Error> for VolitionError {
+    fn from(src: std::io::Error) -> Self {
+        Self::IoErr { src }
     }
 }
