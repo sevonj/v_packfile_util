@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use clap::Parser;
@@ -109,23 +110,24 @@ fn pack(input_dir: PathBuf, output_file: Option<PathBuf>, compress: bool, conden
         paths.push(path);
     }
 
+    let num_files = paths.len();
+
     let mut packfile = Packfile::default();
     if condense {
         packfile.flags |= Packfile::FLAG_CONDENSED;
     }
-    packfile.num_files = paths.len() as i32;
 
-    let (mut stem_block, stem_offsets, mut ext_block, ext_offsets) =
-        generate_filename_blocks(&paths);
+    let mut entries = vec![PackfileEntry::default(); num_files];
+    let (mut stem_block, mut ext_block) = generate_filename_blocks(&paths, &mut entries);
 
-    packfile.len_entries = packfile.num_files * size_of::<PackfileEntry>() as i32;
+    packfile.num_files = num_files as i32;
+    packfile.len_entries = (num_files * size_of::<PackfileEntry>()) as i32;
     packfile.len_stems = stem_block.len() as i32;
     packfile.len_exts = ext_block.len() as i32;
 
     let mut data_block = vec![];
 
-    let mut entries = Vec::with_capacity(packfile.num_files as usize);
-    for ((path, off_stem), off_ext) in paths.into_iter().zip(stem_offsets).zip(ext_offsets) {
+    for (entry, path) in entries.iter_mut().zip(paths) {
         let off_data = data_block.len();
         data_block.append(&mut std::fs::read(path).unwrap());
         let len_data = data_block.len() - off_data;
@@ -135,15 +137,8 @@ fn pack(input_dir: PathBuf, output_file: Option<PathBuf>, compress: bool, conden
             data_block.append(&mut vec![0; align]);
         }
 
-        entries.push(PackfileEntry {
-            off_stem: off_stem as i32,
-            off_ext: off_ext as i32,
-            unknown_08: 0,
-            off_data: off_data as i32,
-            len_data: len_data as i32,
-            runtime_14: -1,
-            runtime_18: 0,
-        });
+        entry.off_data = off_data as i32;
+        entry.len_data = len_data as i32;
     }
 
     packfile.len_data = data_block.len() as i32;
@@ -184,61 +179,42 @@ fn pack(input_dir: PathBuf, output_file: Option<PathBuf>, compress: bool, conden
     std::fs::write(out_file, packed_data).unwrap();
 }
 
-/// Generates raw data for filename blocks and offsets to them
-/// Return: (stem_block, ext_block, [(off_stem, off_ext)])
-fn generate_filename_blocks(paths: &[PathBuf]) -> (Vec<u8>, Vec<usize>, Vec<u8>, Vec<usize>) {
-    let mut stems: Vec<String> = vec![];
-    let mut extensions: Vec<String> = vec![];
-    let mut filename_indices: Vec<(usize, usize)> = Vec::with_capacity(paths.len());
+/// Generate filename blocks and patch their offsets in entries
+/// Return: (stem_block, ext_block)
+fn generate_filename_blocks(
+    paths: &[PathBuf],
+    entries: &mut [PackfileEntry],
+) -> (Vec<u8>, Vec<u8>) {
+    assert_eq!(paths.len(), entries.len());
 
-    for path in paths {
-        let stem = path.file_stem().unwrap().to_str().unwrap().to_owned();
-        let ext = path.extension().unwrap().to_str().unwrap().to_owned();
-
-        let stem_index = stems
-            .iter()
-            .position(|old| old == &stem)
-            .unwrap_or_else(|| {
-                stems.push(stem);
-                stems.len() - 1
-            });
-
-        let ext_index = extensions
-            .iter()
-            .position(|old| old == &ext)
-            .unwrap_or_else(|| {
-                extensions.push(ext);
-                extensions.len() - 1
-            });
-
-        filename_indices.push((stem_index, ext_index));
-    }
-
+    let mut stem_offs = HashMap::new();
+    let mut ext_offs = HashMap::new();
     let mut stem_block = vec![];
-    let mut stem_ind_offsets = vec![];
-    for stem in stems {
-        stem_ind_offsets.push(stem_block.len());
-        stem_block.extend_from_slice(stem.as_bytes());
-        stem_block.push(0);
-    }
-
     let mut ext_block = vec![];
-    let mut ext_ind_offsets = vec![];
-    for ext in extensions {
-        ext_ind_offsets.push(ext_block.len());
-        ext_block.extend_from_slice(ext.as_bytes());
-        ext_block.push(0);
+
+    for (path, entry) in paths.iter().zip(entries) {
+        let stem = path.file_stem().unwrap().to_str().unwrap().to_owned();
+        entry.off_stem = if let Some(off) = stem_offs.get(&stem) {
+            *off
+        } else {
+            let off = stem_block.len() as i32;
+            stem_block.extend_from_slice(stem.as_bytes());
+            stem_block.push(0);
+            stem_offs.insert(stem, off);
+            off
+        };
+
+        let ext = path.extension().unwrap().to_str().unwrap().to_owned();
+        entry.off_ext = if let Some(off) = ext_offs.get(&ext) {
+            *off
+        } else {
+            let off = ext_block.len() as i32;
+            ext_block.extend_from_slice(ext.as_bytes());
+            ext_block.push(0);
+            ext_offs.insert(ext, off);
+            off
+        };
     }
 
-    let mut stem_offsets = vec![];
-    let mut ext_offsets = vec![];
-    for (stem_index, ext_index) in &filename_indices {
-        stem_offsets.push(stem_ind_offsets[*stem_index]);
-        ext_offsets.push(ext_ind_offsets[*ext_index]);
-    }
-
-    assert_eq!(stem_offsets.len(), ext_offsets.len());
-    assert_eq!(stem_offsets.len(), filename_indices.len());
-
-    (stem_block, stem_offsets, ext_block, ext_offsets)
+    (stem_block, ext_block)
 }

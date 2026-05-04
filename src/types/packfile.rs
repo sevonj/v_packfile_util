@@ -265,6 +265,20 @@ pub struct PackfileEntry {
     pub runtime_18: i32,
 }
 
+impl Default for PackfileEntry {
+    fn default() -> Self {
+        Self {
+            off_stem: 0,
+            off_ext: 0,
+            unknown_08: 0,
+            off_data: 0,
+            len_data: 0,
+            runtime_14: -1,
+            runtime_18: 0,
+        }
+    }
+}
+
 impl PackfileEntry {
     pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
@@ -333,15 +347,9 @@ mod tests {
 
     #[test]
     fn test_packfile_entry_serialize_size() {
-        let entry = PackfileEntry {
-            off_stem: 0,
-            off_ext: 0,
-            unknown_08: 0,
-            off_data: 0,
-            len_data: 0,
-            runtime_14: 0,
-            runtime_18: 0,
-        };
-        assert_eq!(entry.to_bytes().len(), size_of::<PackfileEntry>())
+        assert_eq!(
+            PackfileEntry::default().to_bytes().len(),
+            size_of::<PackfileEntry>()
+        )
     }
 }
