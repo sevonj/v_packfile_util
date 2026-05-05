@@ -12,13 +12,21 @@ pub fn check_fits_buf<T>(buf: &[u8]) -> Result<(), VolitionError> {
     }
 }
 
+pub fn read_i32_le(buf: &[u8], offset: usize) -> i32 {
+    i32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap())
+}
+
 #[allow(dead_code)]
 pub fn read_u32_le(buf: &[u8], offset: usize) -> u32 {
     u32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap())
 }
 
-pub fn read_i32_le(buf: &[u8], offset: usize) -> i32 {
-    i32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap())
+pub fn read_i16_le(buf: &[u8], offset: usize) -> i16 {
+    i16::from_le_bytes(buf[offset..offset + 2].try_into().unwrap())
+}
+
+pub fn read_u16_le(buf: &[u8], offset: usize) -> u16 {
+    u16::from_le_bytes(buf[offset..offset + 2].try_into().unwrap())
 }
 
 pub fn read_bytes<const N: usize>(buf: &[u8], offset: usize) -> [u8; N] {

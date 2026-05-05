@@ -1,5 +1,4 @@
 mod error;
-pub mod tools;
 mod types;
 mod util;
 

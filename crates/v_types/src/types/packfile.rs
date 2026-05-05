@@ -38,7 +38,7 @@ pub struct Packfile {
 impl Default for Packfile {
     fn default() -> Self {
         Self {
-            magic: Self::MAGIC,
+            magic: Self::SIGNATURE,
             version: Self::VERSION,
             packfile_name_bufs: [0; 324],
             flags: 0,
@@ -59,7 +59,7 @@ impl Default for Packfile {
 }
 
 impl Packfile {
-    pub const MAGIC: i32 = 0x51890ACE;
+    pub const SIGNATURE: i32 = 0x51890ACE;
     pub const VERSION: i32 = 4;
     /// "The header is actually different pieces aligned to 2048 bytes for historical cd drive reasons..."
     pub const SECTOR_SIZE: usize = 0x800;
@@ -107,8 +107,8 @@ impl Packfile {
         check_fits_buf::<Self>(buf)?;
 
         let magic = read_i32_le(buf, 0);
-        if magic != Self::MAGIC {
-            return Err(VolitionError::InvalidPackfileMagic(magic));
+        if magic != Self::SIGNATURE {
+            return Err(VolitionError::InvalidPackfileSignature(magic));
         }
 
         let version = read_i32_le(buf, 0x4);
@@ -156,8 +156,8 @@ impl Packfile {
 
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(size_of::<Self>());
-        bytes.extend_from_slice(&Self::MAGIC.to_le_bytes());
-        bytes.extend_from_slice(&(self.version as i32).to_le_bytes());
+        bytes.extend_from_slice(&Self::SIGNATURE.to_le_bytes());
+        bytes.extend_from_slice(&self.version.to_le_bytes());
         bytes.extend_from_slice(&self.packfile_name_bufs);
         bytes.extend_from_slice(&self.flags.to_le_bytes());
         bytes.extend_from_slice(&self.sector.to_le_bytes());

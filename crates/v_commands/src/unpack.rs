@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
-use crate::Packfile;
-use crate::VolitionError;
+use v_types::Packfile;
+use v_types::VolitionError;
 
 pub fn unpack(input_file: PathBuf, output_dir: Option<PathBuf>) -> Result<(), VolitionError> {
     let buf = std::fs::read(&input_file).unwrap();

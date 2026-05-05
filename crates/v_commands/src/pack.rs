@@ -4,8 +4,9 @@ use std::io::BufWriter;
 use std::io::Write;
 use std::path::PathBuf;
 
-use crate::PackfileEntry;
-use crate::{Packfile, VolitionError};
+use v_types::Packfile;
+use v_types::PackfileEntry;
+use v_types::VolitionError;
 
 pub fn pack(
     input_dir: PathBuf,

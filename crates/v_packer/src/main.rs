@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use clap::Parser;
 use clap::Subcommand;
-use v_packfile_util::tools::pack;
-use v_packfile_util::tools::unpack;
+use v_commands::pack;
+use v_commands::unpack;
 
 #[derive(Parser)]
 #[command(author, version, about = "Volition packfile tool")]

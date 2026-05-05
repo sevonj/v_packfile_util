@@ -1,7 +1,16 @@
-[package]
-name = "v_packfile_util"
+[workspace]
+resolver = "2"
+members = [
+  "crates/v_commands",
+  "crates/v_packer",
+  "crates/v_types",
+]
+
+[workspace.package]
 version = "0.1.0"
+license = "GPL-3.0-or-later"
 edition = "2024"
 
-[dependencies]
-clap = { version = "4.6.1", features = ["derive"] }
+[workspace.dependencies]
+v_types = { path = "crates/v_types" }
+v_commands = { path = "crates/v_commands" }
