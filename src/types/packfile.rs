@@ -1,37 +1,11 @@
 use crate::error::VolitionError;
 use crate::util::*;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(i32)]
-pub enum PackfileVersion {
-    Rfg = 3,
-    Sr2 = 4,
-    Srtt = 6,
-    Sriv = 10,
-    Srr = 17,
-}
-
-impl TryFrom<i32> for PackfileVersion {
-    type Error = VolitionError;
-
-    fn try_from(value: i32) -> Result<Self, Self::Error> {
-        use PackfileVersion::*;
-        match value {
-            3 => Ok(Rfg),
-            4 => Ok(Sr2),
-            6 => Ok(Srtt),
-            10 => Ok(Sriv),
-            11 => Ok(Srr),
-            _ => Err(VolitionError::UnknownPackfileVersion(value)),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct Packfile {
     pub magic: i32,
-    pub version: PackfileVersion,
+    pub version: i32,
     /// Unused. filename/pathname/pad probably, 65/256/3 bytes
     packfile_name_bufs: [u8; 324],
     pub flags: i32,
@@ -65,7 +39,7 @@ impl Default for Packfile {
     fn default() -> Self {
         Self {
             magic: Self::MAGIC,
-            version: PackfileVersion::Sr2,
+            version: Self::VERSION,
             packfile_name_bufs: [0; 324],
             flags: 0,
             sector: 0,
@@ -85,7 +59,7 @@ impl Default for Packfile {
 }
 
 impl Packfile {
-    pub const MAGIC: i32 = 0x5189_0ACE;
+    pub const MAGIC: i32 = 0x51890ACE;
     pub const VERSION: i32 = 4;
     /// "The header is actually different pieces aligned to 2048 bytes for historical cd drive reasons..."
     pub const SECTOR_SIZE: usize = 0x800;
@@ -137,9 +111,9 @@ impl Packfile {
             return Err(VolitionError::InvalidPackfileMagic(magic));
         }
 
-        let version = PackfileVersion::try_from(read_i32_le(buf, 4))?;
-        if version != PackfileVersion::Sr2 {
-            return Err(VolitionError::UnknownPackfileVersion(version as i32));
+        let version = read_i32_le(buf, 0x4);
+        if version != Self::VERSION {
+            return Err(VolitionError::UnknownPackfileVersion(version));
         }
 
         let len_compressed = read_i32_le(buf, 0x16c);
