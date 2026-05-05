@@ -171,6 +171,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "v_meshdump"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "v_types",
+]
+
+[[package]]
 name = "v_packer"
 version = "0.1.0"
 dependencies = [

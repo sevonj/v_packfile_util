@@ -4,6 +4,7 @@ members = [
   "crates/v_commands",
   "crates/v_packer",
   "crates/v_types",
+  "crates/v_meshdump",
 ]
 
 [workspace.package]

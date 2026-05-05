@@ -29,6 +29,10 @@ pub fn read_u16_le(buf: &[u8], offset: usize) -> u16 {
     u16::from_le_bytes(buf[offset..offset + 2].try_into().unwrap())
 }
 
+pub fn read_f32_le(buf: &[u8], offset: usize) -> f32 {
+    f32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap())
+}
+
 pub fn read_bytes<const N: usize>(buf: &[u8], offset: usize) -> [u8; N] {
     buf.get(offset..offset + N)
         .and_then(|b| b.try_into().ok())

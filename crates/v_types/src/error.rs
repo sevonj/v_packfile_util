@@ -1,6 +1,7 @@
 use std::error::Error;
 
 use crate::Packfile;
+use crate::StaticMesh;
 
 #[derive(Debug)]
 pub enum VolitionError {
@@ -23,6 +24,9 @@ pub enum VolitionError {
     InvalidPackfileSignature(i32),
     UnknownPackfileVersion(i32),
     PackfileCompression,
+
+    InvalidStaticMeshSignature(i32),
+    UnknownStaticMeshVersion(i16),
 }
 
 impl std::fmt::Display for VolitionError {
@@ -52,6 +56,16 @@ impl std::fmt::Display for VolitionError {
                 Packfile::VERSION
             ),
             PackfileCompression => write!(f, "Packfile compression not yet supported"),
+            InvalidStaticMeshSignature(got) => write!(
+                f,
+                "Invalid static mesh signature: expected {:08X?}, got {got:08X?}",
+                StaticMesh::SIGNATURE
+            ),
+            UnknownStaticMeshVersion(got) => write!(
+                f,
+                "Unknown static mesh version: expected {:08X?}, got {got:08X?}",
+                StaticMesh::VERSION
+            ),
         }
     }
 }
