@@ -1,17 +1,17 @@
 use std::path::PathBuf;
 
-use v_types::Material;
 use v_types::MaterialBlock;
-use v_types::MaterialTextureEntry;
-use v_types::MaterialUnknown3;
+use v_types::Mesh;
+use v_types::MeshData;
 use v_types::StaticMesh;
 use v_types::StaticMeshNavPoint;
+use v_types::VertexBuffer;
 use v_types::util::*;
 
 fn main() {
     let path = PathBuf::from("samples/meshes_extracted/aisha.cmesh_pc");
     // let path = PathBuf::from("samples/meshes_extracted/acousticguitar.smesh_pc");
-    //let path = PathBuf::from("samples/meshes_extracted/box.smesh_pc");
+    // let path = PathBuf::from("samples/meshes_extracted/box.smesh_pc");
     let buf = std::fs::read(path).unwrap();
 
     let smesh = StaticMesh::from_data(&buf).unwrap();
@@ -58,63 +58,35 @@ fn main() {
     }
 
     let material_block = MaterialBlock::from_data(&buf[data_offset..]).unwrap();
-    data_offset += size_of::<MaterialBlock>();
-
-    let num_materials = material_block.num_materials as usize;
-    let num_mat_consts = material_block.num_shader_consts as usize;
-    let num_mat_unknown3 = material_block.num_mat_unknown3 as usize;
-
-    let mut materials = Vec::with_capacity(num_materials);
-    for _ in 0..num_materials {
-        materials.push(Material::from_data(&buf[data_offset..]).unwrap());
-        data_offset += size_of::<Material>();
-    }
-
-    let mut mat_unk16b: Vec<[u8; 16]> = Vec::with_capacity(num_materials);
-    for _ in 0..num_materials {
-        mat_unk16b.push(read_bytes(&buf, data_offset));
-        data_offset += 16;
-    }
-
-    align_16(&mut data_offset);
-    let mut mat_consts = Vec::with_capacity(num_mat_consts);
-    for _ in 0..num_mat_consts {
-        mat_consts.push(read_f32_le(&buf, data_offset));
-        data_offset += 4;
-    }
-
-    let mut mat_tex_entries = Vec::with_capacity(num_materials);
-    for _ in 0..(num_materials * 16) {
-        mat_tex_entries.push(MaterialTextureEntry::from_data(&buf[data_offset..]).unwrap());
-        data_offset += size_of::<MaterialTextureEntry>();
-    }
-
-    let mut mat_unknown3 = Vec::with_capacity(num_mat_unknown3);
-    for _ in 0..num_mat_unknown3 {
-        mat_unknown3.push(MaterialUnknown3::from_data(&buf[data_offset..]).unwrap());
-        data_offset += size_of::<MaterialUnknown3>();
-    }
-
-    let mut mat_unknown4 = vec![];
-    for unk3 in &mat_unknown3 {
-        for _ in 0..unk3.num_mat_unk4 {
-            mat_unknown4.push(read_i32_le(&buf, data_offset));
-            data_offset += 4;
-        }
-    }
+    let _materials_data = {
+        let (data, len) = material_block.read_materials(&buf[data_offset..]).unwrap();
+        data_offset += len;
+        data
+    };
 
     println!("{smesh:#?}");
-    println!("tex flags(?):     {tex_flags:#?}");
-    println!("tex names:        {tex_names:#?}");
-    println!("navpoints:        {num_navpoints:#?}");
-    println!("bones(?):         {unk_24:#?}");
-    println!("material_block:   {material_block:#?}");
-    println!("materials:        {materials:#?}");
-    println!("mat_unk16b:       {mat_unk16b:#?}");
-    println!("mat_consts:       {mat_consts:#?}");
-    println!("mat_tex_entries:  {mat_tex_entries:#?}");
-    println!("mat_unknown3:     {mat_unknown3:#?}");
-    println!("mat_unknown4:     {mat_unknown4:#?}");
+
+    let mesh = Mesh::from_data(&buf[data_offset..]).unwrap();
+    data_offset += size_of::<Mesh>();
+    if smesh.unk_2c != 0 {
+        data_offset += 20;
+    }
+    align_16(&mut data_offset);
+    let (_sm_a, _sm_b, sm_len) = mesh.read_submeshes(&buf[data_offset..]).unwrap();
+    data_offset += sm_len;
+
+    let mesh_buf = MeshData::from_data(&buf[data_offset..]).unwrap();
+    data_offset += size_of::<MeshData>();
+
+    let num_vertex_buffers = mesh_buf.num_vertex_buffers as usize;
+    let mut vertex_buffers = Vec::with_capacity(num_vertex_buffers);
+    for _ in 0..num_vertex_buffers {
+        vertex_buffers.push(VertexBuffer::from_data(&buf[data_offset..]).unwrap());
+        data_offset += size_of::<VertexBuffer>();
+    }
+
+    println!("{mesh_buf:#?}");
+    println!("{vertex_buffers:#X?}");
 
     println!("meh {data_offset:#X?}");
 }

@@ -1,13 +1,21 @@
+mod aabb;
 mod material;
+mod mesh;
 mod packfile;
 mod quaternion;
 mod static_mesh;
 mod vector;
 
+pub use aabb::AABB;
 pub use material::Material;
 pub use material::MaterialBlock;
 pub use material::MaterialTextureEntry;
 pub use material::MaterialUnknown3;
+pub use mesh::Mesh;
+pub use mesh::MeshData;
+pub use mesh::Submesh;
+pub use mesh::Surface;
+pub use mesh::VertexBuffer;
 pub use packfile::Packfile;
 pub use packfile::PackfileEntry;
 pub use quaternion::Quaternion;

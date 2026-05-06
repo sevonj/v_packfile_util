@@ -193,6 +193,77 @@ impl MaterialBlock {
             unknown_20,
         })
     }
+
+    /// # Arguments: buf must be sliced to start at material header (buffer contains Self)
+    /// Return: (data, len)
+    /// len is distance from start of buf to end of material data.
+    pub fn read_materials(&self, buf: &[u8]) -> Result<(MaterialParsedTemp, usize), VolitionError> {
+        let mut data_offset = size_of::<Self>();
+
+        let num_materials = self.num_materials as usize;
+        let num_mat_consts = self.num_shader_consts as usize;
+        let num_mat_unknown3 = self.num_mat_unknown3 as usize;
+
+        let mut materials = Vec::with_capacity(num_materials);
+        for _ in 0..num_materials {
+            materials.push(Material::from_data(&buf[data_offset..])?);
+            data_offset += size_of::<Material>();
+        }
+
+        let mut mat_unk16b: Vec<[u8; 16]> = Vec::with_capacity(num_materials);
+        for _ in 0..num_materials {
+            mat_unk16b.push(read_bytes(&buf, data_offset));
+            data_offset += 16;
+        }
+
+        align_16(&mut data_offset);
+        let mut mat_consts = Vec::with_capacity(num_mat_consts);
+        for _ in 0..num_mat_consts {
+            mat_consts.push(read_f32_le(&buf, data_offset));
+            data_offset += 4;
+        }
+
+        let mut mat_tex_entries = Vec::with_capacity(num_materials);
+        for _ in 0..(num_materials * 16) {
+            mat_tex_entries.push(MaterialTextureEntry::from_data(&buf[data_offset..])?);
+            data_offset += size_of::<MaterialTextureEntry>();
+        }
+
+        let mut mat_unknown3 = Vec::with_capacity(num_mat_unknown3);
+        for _ in 0..num_mat_unknown3 {
+            mat_unknown3.push(MaterialUnknown3::from_data(&buf[data_offset..])?);
+            data_offset += size_of::<MaterialUnknown3>();
+        }
+
+        let mut mat_unknown4 = vec![];
+        for unk3 in &mat_unknown3 {
+            for _ in 0..unk3.num_mat_unk4 {
+                mat_unknown4.push(read_i32_le(&buf, data_offset));
+                data_offset += 4;
+            }
+        }
+        Ok((
+            MaterialParsedTemp {
+                materials,
+                mat_unk16b,
+                mat_consts,
+                mat_tex_entries,
+                mat_unknown3,
+                mat_unknown4,
+            },
+            data_offset,
+        ))
+    }
+}
+
+#[derive(Debug)]
+pub struct MaterialParsedTemp {
+    pub materials: Vec<Material>,
+    pub mat_unk16b: Vec<[u8; 16]>,
+    pub mat_consts: Vec<f32>,
+    pub mat_tex_entries: Vec<MaterialTextureEntry>,
+    pub mat_unknown3: Vec<MaterialUnknown3>,
+    pub mat_unknown4: Vec<i32>,
 }
 
 #[cfg(test)]
