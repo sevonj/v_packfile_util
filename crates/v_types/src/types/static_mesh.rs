@@ -19,6 +19,11 @@ pub struct StaticMesh {
 
     pub bounding_center: Vector,
     pub bounding_radius: f32,
+
+    /// Bone indices?
+    pub unk_num_24: i32,
+    pub unk_28: i32,
+    pub unk_2c: i32,
 }
 
 impl StaticMesh {
@@ -55,6 +60,10 @@ impl StaticMesh {
 
             bounding_center: Vector::from_data(&buf[0x14..])?,
             bounding_radius: read_f32_le(buf, 0x20),
+
+            unk_num_24: read_i32_le(buf, 0x24),
+            unk_28: read_i32_le(buf, 0x28),
+            unk_2c: read_i32_le(buf, 0x2c),
         })
     }
 }
