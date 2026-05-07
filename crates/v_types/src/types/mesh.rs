@@ -41,7 +41,7 @@ enum VertexAttributeTypes {
     CPosition,
     XCposition,
 
-    NumRlVertexAttributeTypes,
+    Num,
 }
 
 pub type Submeshes = Vec<(SubmeshHeader, Vec<Surface>)>;
@@ -189,6 +189,7 @@ impl MeshHeader {
     /// # Arguments: buf must be sliced to start after Mesh
     /// Return: (data_a, data_b, len)
     /// len is distance from start of buf to end of data.
+    #[allow(clippy::type_complexity)]
     pub fn read_submeshes(
         &self,
         buf: &[u8],

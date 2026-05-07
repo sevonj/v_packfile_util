@@ -29,14 +29,14 @@ impl Matlib {
 
         let mut mat_unk1s: Vec<[u8; 16]> = Vec::with_capacity(num_materials);
         for _ in 0..num_materials {
-            mat_unk1s.push(read_bytes(&buf, data_offset));
+            mat_unk1s.push(read_bytes(buf, data_offset));
             data_offset += 16;
         }
 
         align_16(&mut data_offset);
         let mut mat_consts = Vec::with_capacity(num_mat_consts);
         for _ in 0..num_mat_consts {
-            mat_consts.push(read_f32_le(&buf, data_offset));
+            mat_consts.push(read_f32_le(buf, data_offset));
             data_offset += 4;
         }
 
@@ -55,7 +55,7 @@ impl Matlib {
         let mut mat_unknown4s = vec![];
         for unk3 in &mat_unknown3s {
             for _ in 0..unk3.num_mat_unk4 {
-                mat_unknown4s.push(read_i32_le(&buf, data_offset));
+                mat_unknown4s.push(read_i32_le(buf, data_offset));
                 data_offset += 4;
             }
         }

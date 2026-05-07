@@ -21,7 +21,7 @@ pub struct StaticMesh {
 
 impl StaticMesh {
     pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
-        let header = StaticMeshHeader::from_data(&buf)?;
+        let header = StaticMeshHeader::from_data(buf)?;
 
         let num_textures = header.num_textures as usize;
         let num_navpoints = header.num_navpoints as usize;
@@ -31,7 +31,7 @@ impl StaticMesh {
 
         let mut texture_flags = Vec::with_capacity(num_textures);
         for _ in 0..num_textures {
-            texture_flags.push(read_i32_le(&buf, data_offset));
+            texture_flags.push(read_i32_le(buf, data_offset));
             data_offset += 4;
         }
 
@@ -39,7 +39,7 @@ impl StaticMesh {
         data_offset += 1; // for some there's an extra null byte at start 
         let mut texture_names = Vec::with_capacity(num_textures);
         for _ in 0..num_textures {
-            let name = read_cstr(&buf, data_offset)?;
+            let name = read_cstr(buf, data_offset)?;
             data_offset += name.len();
             data_offset += 1; // nullterm
             texture_names.push(name.to_string());
@@ -58,7 +58,7 @@ impl StaticMesh {
         if num_bones > 0 {
             align_16(&mut data_offset);
             for _ in 0..num_bones {
-                bone_indices.push(read_i32_le(&buf, data_offset));
+                bone_indices.push(read_i32_le(buf, data_offset));
                 data_offset += 4;
             }
         }
