@@ -44,10 +44,127 @@ enum VertexAttributeTypes {
     NumRlVertexAttributeTypes,
 }
 
-/// A mesh that gets its data from the GPU chunk
+pub type Submeshes = Vec<(SubmeshHeader, Vec<Surface>)>;
+
+#[derive(Debug, Clone)]
+pub struct Mesh {
+    pub header: MeshHeader,
+    pub submeshes: Vec<Submesh>,
+}
+
+impl Mesh {
+    pub fn from_data(buf: &[u8], unk_2c: i32) -> Result<(Self, usize), VolitionError> {
+        let mut data_offset = 0;
+
+        let header = MeshHeader::from_data(&buf[data_offset..])?;
+        data_offset += size_of::<MeshHeader>();
+
+        let num_submeshes = header.num_submeshes as usize;
+
+        if unk_2c != 0 {
+            data_offset += 20;
+        }
+
+        align_16(&mut data_offset);
+        let (sma, smb, sm_len) = header.read_submeshes(&buf[data_offset..])?;
+        data_offset += sm_len;
+
+        let mut submeshes = Vec::with_capacity(num_submeshes);
+
+        for i in 0..num_submeshes {
+            let has_gpu = !sma.is_empty();
+            let has_cpu = !smb.is_empty();
+
+            let (gpu_data, gpu_vbufs) = if has_gpu {
+                let gpu_data = MeshData::from_data(&buf[data_offset..])?;
+                data_offset += size_of::<MeshData>();
+                if gpu_data.mesh_type != 0 {
+                    return Err(VolitionError::UnexpectedValue {
+                        field: "MeshData::mesh_type (gpu)",
+                        expected: 0,
+                        got: gpu_data.mesh_type as i32,
+                    });
+                }
+                let num_gpu_vbufs = gpu_data.num_vertex_buffers as usize;
+
+                let mut gpu_vbufs = Vec::with_capacity(num_gpu_vbufs);
+                for _ in 0..gpu_data.num_vertex_buffers {
+                    gpu_vbufs.push(VertexBuffer::from_data(&buf[data_offset..])?);
+                    data_offset += size_of::<VertexBuffer>();
+                }
+                (Some(gpu_data), gpu_vbufs)
+            } else {
+                (None, vec![])
+            };
+
+            let (cpu_data, cpu_vbufs, cpu_vdata, cpu_idata) = if has_cpu {
+                let cpu_data = MeshData::from_data(&buf[data_offset..])?;
+                data_offset += size_of::<MeshData>();
+                if cpu_data.mesh_type != 7 {
+                    return Err(VolitionError::UnexpectedValue {
+                        field: "MeshData::mesh_type (cpu)",
+                        expected: 7,
+                        got: cpu_data.mesh_type as i32,
+                    });
+                }
+                let num_cpu_vbufs = cpu_data.num_vertex_buffers as usize;
+                let num_cpu_indices = cpu_data.num_indices as usize;
+
+                let mut cpu_vbufs = Vec::with_capacity(num_cpu_vbufs);
+                for _ in 0..cpu_data.num_vertex_buffers {
+                    cpu_vbufs.push(VertexBuffer::from_data(&buf[data_offset..])?);
+                    data_offset += size_of::<VertexBuffer>();
+                }
+
+                align_16(&mut data_offset);
+                let mut len_cpu_vdata = 0;
+                for vbuf in &cpu_vbufs {
+                    len_cpu_vdata += vbuf.num_vertices as usize * vbuf.stride as usize;
+                    align_16(&mut len_cpu_vdata);
+                }
+                let cpu_vdata = buf[data_offset..(data_offset + len_cpu_vdata)].to_vec();
+                data_offset += len_cpu_vdata;
+
+                let len_cpu_idata = num_cpu_indices * 2;
+                let cpu_idata = buf[data_offset..(data_offset + len_cpu_idata)].to_vec();
+                data_offset += len_cpu_idata;
+
+                (Some(cpu_data), cpu_vbufs, cpu_vdata, cpu_idata)
+            } else {
+                (None, vec![], vec![], vec![])
+            };
+
+            submeshes.push(Submesh {
+                submesh_a: sma.get(i).cloned(),
+                submesh_b: smb.get(i).cloned(),
+                gpu_data,
+                gpu_vbufs,
+                cpu_data,
+                cpu_vbufs,
+                cpu_vdata,
+                cpu_idata,
+            });
+        }
+
+        Ok((Self { header, submeshes }, data_offset))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Submesh {
+    pub submesh_a: Option<(SubmeshHeader, Vec<Surface>)>,
+    pub submesh_b: Option<(SubmeshHeader, Vec<Surface>)>,
+    pub gpu_data: Option<MeshData>,
+    pub gpu_vbufs: Vec<VertexBuffer>,
+    pub cpu_data: Option<MeshData>,
+    pub cpu_vbufs: Vec<VertexBuffer>,
+    pub cpu_vdata: Vec<u8>,
+    pub cpu_idata: Vec<u8>,
+}
+
 #[derive(Debug, Clone)]
 #[repr(C)]
-pub struct Mesh {
+pub struct MeshHeader {
     pub aabb: AABB,
     pub unk_18: i32,
     pub num_submeshes: i16,
@@ -56,7 +173,7 @@ pub struct Mesh {
     pub ptr_submesh_b: i32,
 }
 
-impl Mesh {
+impl MeshHeader {
     pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
         Ok(Self {
@@ -77,8 +194,8 @@ impl Mesh {
         buf: &[u8],
     ) -> Result<
         (
-            Vec<(Submesh, Vec<Surface>)>,
-            Vec<(Submesh, Vec<Surface>)>,
+            Vec<(SubmeshHeader, Vec<Surface>)>,
+            Vec<(SubmeshHeader, Vec<Surface>)>,
             usize,
         ),
         VolitionError,
@@ -91,16 +208,16 @@ impl Mesh {
 
         if self.ptr_submesh_a != 0 {
             for _ in 0..num_submeshes {
-                let sm = Submesh::from_data(&buf[data_offset..])?;
-                data_offset += size_of::<Submesh>();
+                let sm = SubmeshHeader::from_data(&buf[data_offset..])?;
+                data_offset += size_of::<SubmeshHeader>();
                 headers_a.push(sm);
             }
         }
 
         if self.ptr_submesh_b != 0 {
             for _ in 0..num_submeshes {
-                let sm = Submesh::from_data(&buf[data_offset..])?;
-                data_offset += size_of::<Submesh>();
+                let sm = SubmeshHeader::from_data(&buf[data_offset..])?;
+                data_offset += size_of::<SubmeshHeader>();
                 headers_b.push(sm);
             }
         }
@@ -126,7 +243,7 @@ impl Mesh {
 
 #[derive(Debug, Clone)]
 #[repr(C)]
-pub struct Submesh {
+pub struct SubmeshHeader {
     pub unk_00: i16,
     pub num_surfaces: i16,
     pub unk_04: i32,
@@ -134,7 +251,7 @@ pub struct Submesh {
     pub unk_0c: i32,
 }
 
-impl Submesh {
+impl SubmeshHeader {
     pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
         Ok(Self {

@@ -1,32 +1,151 @@
+use crate::Matlib;
 use crate::Quaternion;
 use crate::Vector;
 use crate::VolitionError;
+use crate::types::mesh::Mesh;
 use crate::util::*;
 
-#[derive(Debug, Clone, Copy)]
-#[repr(C)]
+/// Deserialized cmesh/smesh
+#[derive(Debug, Clone)]
 pub struct StaticMesh {
+    pub header: StaticMeshHeader,
+    /// Probably. At least matches texture count.
+    pub texture_flags: Vec<i32>,
+    pub texture_names: Vec<String>,
+    pub navpoints: Vec<StaticMeshNavPoint>,
+    /// Maybe.
+    pub bone_indices: Vec<i32>,
+    pub matlib: Matlib,
+    pub mesh: Mesh,
+}
+
+impl StaticMesh {
+    pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
+        let header = StaticMeshHeader::from_data(&buf)?;
+
+        let num_textures = header.num_textures as usize;
+        let num_navpoints = header.num_navpoints as usize;
+        let num_bones = header.num_bones as usize;
+
+        let mut data_offset = 0x40;
+
+        let mut texture_flags = Vec::with_capacity(num_textures);
+        for _ in 0..num_textures {
+            texture_flags.push(read_i32_le(&buf, data_offset));
+            data_offset += 4;
+        }
+
+        align_16(&mut data_offset);
+        data_offset += 1; // for some there's an extra null byte at start 
+        let mut texture_names = Vec::with_capacity(num_textures);
+        for _ in 0..num_textures {
+            let name = read_cstr(&buf, data_offset)?;
+            data_offset += name.len();
+            data_offset += 1; // nullterm
+            texture_names.push(name.to_string());
+        }
+
+        let mut navpoints = Vec::with_capacity(num_navpoints);
+        if num_navpoints > 0 {
+            align_16(&mut data_offset);
+            for _ in 0..num_navpoints {
+                navpoints.push(StaticMeshNavPoint::from_data(&buf[data_offset..])?);
+                data_offset += size_of::<StaticMeshNavPoint>();
+            }
+        }
+
+        let mut bone_indices = Vec::with_capacity(num_bones);
+        if num_bones > 0 {
+            align_16(&mut data_offset);
+            for _ in 0..num_bones {
+                bone_indices.push(read_i32_le(&buf, data_offset));
+                data_offset += 4;
+            }
+        }
+
+        let matlib = {
+            let (matlib, len) = Matlib::from_data(&buf[data_offset..])?;
+            data_offset += len;
+            matlib
+        };
+
+        let mesh = {
+            let (mesh, len) = Mesh::from_data(&buf[data_offset..], header.unk_2c)?;
+            data_offset += len;
+            mesh
+        };
+
+        println!("end: {data_offset:#X?}");
+
+        Ok(Self {
+            header,
+            texture_flags,
+            texture_names,
+            navpoints,
+            bone_indices,
+            matlib,
+            mesh,
+        })
+    }
+
+    pub fn dump_wavefront_cpu(&self) -> String {
+        let mut out = String::new();
+
+        let mut next_index = 1;
+        for (i, submesh) in self.mesh.submeshes.iter().enumerate() {
+            let Some(cpu_data) = &submesh.cpu_data else {
+                continue;
+            };
+            out += &format!("g submesh_{}\n", i);
+
+            let vbuf = &submesh.cpu_vdata;
+            let mut voff = 0;
+            let mut added_vertices = 0;
+            for head in &submesh.cpu_vbufs {
+                assert_eq!(head.stride, 12);
+                for _ in 0..head.num_vertices {
+                    let v = Vector::from_data(&vbuf[voff..]).unwrap();
+                    out += &format!("v {} {} {}\n", v.x, v.y, v.z);
+                    voff += 12;
+                }
+                added_vertices += head.num_vertices as usize;
+            }
+
+            let ibuf = &submesh.cpu_idata;
+            let mut ioff = 0;
+            for _ in 0..cpu_data.num_indices - 2 {
+                let a = next_index + read_u16_le(ibuf, ioff) as usize;
+                let b = next_index + read_u16_le(ibuf, ioff + 2) as usize;
+                let c = next_index + read_u16_le(ibuf, ioff + 4) as usize;
+                out += &format!("f {a} {b} {c}\n");
+                ioff += 2;
+            }
+            next_index += added_vertices;
+        }
+
+        out
+    }
+}
+
+#[derive(Debug, Clone)]
+#[repr(C)]
+pub struct StaticMeshHeader {
     pub magic: i32,
     pub version: i16,
     pub mesh_flags: i16,
-
     pub unk_08: i32,
     pub num_textures: i16,
-    /// Probably. number of "weapon_handle"s
     pub num_navpoints: i16,
-
     pub unk_10: i32,
-
     pub bounding_center: Vector,
     pub bounding_radius: f32,
-
-    /// Bone indices?
-    pub unk_num_24: i32,
+    /// maybe?
+    pub num_bones: i32,
     pub unk_28: i32,
     pub unk_2c: i32,
 }
 
-impl StaticMesh {
+impl StaticMeshHeader {
     pub const SIGNATURE: i32 = 0x424BD00D;
     pub const VERSION: i16 = 33;
 
@@ -51,17 +170,13 @@ impl StaticMesh {
             magic,
             version,
             mesh_flags: read_i16_le(buf, 0x6),
-
             unk_08: read_i32_le(buf, 0x8),
             num_textures: read_i16_le(buf, 0xc),
             num_navpoints: read_i16_le(buf, 0xe),
-
             unk_10: read_i32_le(buf, 0x10),
-
             bounding_center: Vector::from_data(&buf[0x14..])?,
             bounding_radius: read_f32_le(buf, 0x20),
-
-            unk_num_24: read_i32_le(buf, 0x24),
+            num_bones: read_i32_le(buf, 0x24),
             unk_28: read_i32_le(buf, 0x28),
             unk_2c: read_i32_le(buf, 0x2c),
         })

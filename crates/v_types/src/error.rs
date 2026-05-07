@@ -1,13 +1,14 @@
 use std::error::Error;
 
 use crate::Packfile;
-use crate::StaticMesh;
+use crate::StaticMeshHeader;
 
 #[derive(Debug)]
 pub enum VolitionError {
     BufferTooSmall {
+        for_what: &'static str,
         need: usize,
-        got: usize,
+        avail: usize,
     },
     IoErr {
         src: std::io::Error,
@@ -20,6 +21,7 @@ pub enum VolitionError {
     InvalidString {
         offset: usize,
     },
+    CStringRanOutOfBytes(usize),
 
     InvalidPackfileSignature(i32),
     UnknownPackfileVersion(i32),
@@ -34,7 +36,14 @@ impl std::fmt::Display for VolitionError {
         use VolitionError::*;
 
         match self {
-            BufferTooSmall { need, got } => write!(f, "Not enough bytes: need {need}, got {got}"),
+            BufferTooSmall {
+                for_what,
+                need,
+                avail,
+            } => write!(
+                f,
+                "Not enough bytes for {for_what:?}: need {need:?}, available {avail:?}"
+            ),
             IoErr { src } => src.fmt(f),
             UnexpectedValue {
                 field,
@@ -45,6 +54,9 @@ impl std::fmt::Display for VolitionError {
                 "Unexpected value for `{field}`: expected {expected}, got {got}"
             ),
             InvalidString { offset } => write!(f, "Invalid string at offset: {offset:X?}"),
+            CStringRanOutOfBytes(len) => {
+                write!(f, "Buffer ran out before cstr nullterm. len: {len}")
+            }
             InvalidPackfileSignature(got) => write!(
                 f,
                 "Invalid packfile signature: expected {:08X?}, got {got:08X?}",
@@ -59,12 +71,12 @@ impl std::fmt::Display for VolitionError {
             InvalidStaticMeshSignature(got) => write!(
                 f,
                 "Invalid static mesh signature: expected {:08X?}, got {got:08X?}",
-                StaticMesh::SIGNATURE
+                StaticMeshHeader::SIGNATURE
             ),
             UnknownStaticMeshVersion(got) => write!(
                 f,
                 "Unknown static mesh version: expected {:08X?}, got {got:08X?}",
-                StaticMesh::VERSION
+                StaticMeshHeader::VERSION
             ),
         }
     }

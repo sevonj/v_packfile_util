@@ -1,11 +1,14 @@
+use std::any::type_name;
+
 use crate::error::VolitionError;
 
 pub fn check_fits_buf<T>(buf: &[u8]) -> Result<(), VolitionError> {
     let expected = size_of::<T>();
     if buf.len() < expected {
         Err(VolitionError::BufferTooSmall {
+            for_what: type_name::<T>(),
             need: expected,
-            got: buf.len(),
+            avail: buf.len(),
         })
     } else {
         Ok(())
@@ -40,10 +43,9 @@ pub fn read_bytes<const N: usize>(buf: &[u8], offset: usize) -> [u8; N] {
 }
 
 pub fn read_cstr(buf: &[u8], offset: usize) -> Result<&str, VolitionError> {
-    let buf = buf.get(offset..).ok_or(VolitionError::BufferTooSmall {
-        need: offset,
-        got: buf.len(),
-    })?;
+    let buf = buf
+        .get(offset..)
+        .ok_or(VolitionError::CStringRanOutOfBytes(buf.len()))?;
 
     let len = buf
         .iter()

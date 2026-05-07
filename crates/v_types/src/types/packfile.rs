@@ -213,8 +213,9 @@ impl Packfile {
 
         if buf.len() < end {
             Err(VolitionError::BufferTooSmall {
+                for_what: "packfile entry contents",
                 need: end,
-                got: buf.len(),
+                avail: buf.len(),
             })
         } else {
             Ok(&buf[start..end])
