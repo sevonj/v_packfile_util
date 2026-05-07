@@ -12,10 +12,9 @@ pub struct Matlib {
 }
 
 impl Matlib {
-    /// Return: (data, len)
-    pub fn from_data(buf: &[u8]) -> Result<(Self, usize), VolitionError> {
-        let material_block = MaterialBlock::from_data(buf)?;
-        let mut data_offset = size_of::<MaterialBlock>();
+    pub fn from_data(buf: &[u8], data_offset: &mut usize) -> Result<Self, VolitionError> {
+        let material_block = MaterialBlock::from_data(&buf[*data_offset..])?;
+        *data_offset += size_of::<MaterialBlock>();
 
         let num_materials = material_block.num_materials as usize;
         let num_mat_consts = material_block.num_shader_consts as usize;
@@ -23,53 +22,50 @@ impl Matlib {
 
         let mut materials = Vec::with_capacity(num_materials);
         for _ in 0..num_materials {
-            materials.push(Material::from_data(&buf[data_offset..])?);
-            data_offset += size_of::<Material>();
+            materials.push(Material::from_data(&buf[*data_offset..])?);
+            *data_offset += size_of::<Material>();
         }
 
         let mut mat_unk1s: Vec<[u8; 16]> = Vec::with_capacity(num_materials);
         for _ in 0..num_materials {
-            mat_unk1s.push(read_bytes(buf, data_offset));
-            data_offset += 16;
+            mat_unk1s.push(read_bytes(buf, *data_offset));
+            *data_offset += 16;
         }
 
-        align_16(&mut data_offset);
+        align(data_offset, 16);
         let mut mat_consts = Vec::with_capacity(num_mat_consts);
         for _ in 0..num_mat_consts {
-            mat_consts.push(read_f32_le(buf, data_offset));
-            data_offset += 4;
+            mat_consts.push(read_f32_le(buf, *data_offset));
+            *data_offset += 4;
         }
 
         let mut mat_textures = Vec::with_capacity(num_materials);
         for _ in 0..(num_materials * 16) {
-            mat_textures.push(MaterialTextureEntry::from_data(&buf[data_offset..])?);
-            data_offset += size_of::<MaterialTextureEntry>();
+            mat_textures.push(MaterialTextureEntry::from_data(&buf[*data_offset..])?);
+            *data_offset += size_of::<MaterialTextureEntry>();
         }
 
         let mut mat_unknown3s = Vec::with_capacity(num_mat_unknown3);
         for _ in 0..num_mat_unknown3 {
-            mat_unknown3s.push(MaterialUnknown3::from_data(&buf[data_offset..])?);
-            data_offset += size_of::<MaterialUnknown3>();
+            mat_unknown3s.push(MaterialUnknown3::from_data(&buf[*data_offset..])?);
+            *data_offset += size_of::<MaterialUnknown3>();
         }
 
         let mut mat_unknown4s = vec![];
         for unk3 in &mat_unknown3s {
             for _ in 0..unk3.num_mat_unk4 {
-                mat_unknown4s.push(read_i32_le(buf, data_offset));
-                data_offset += 4;
+                mat_unknown4s.push(read_i32_le(buf, *data_offset));
+                *data_offset += 4;
             }
         }
-        Ok((
-            Self {
-                materials,
-                mat_unk1s,
-                mat_consts,
-                mat_textures,
-                mat_unknown3s,
-                mat_unknown4s,
-            },
-            data_offset,
-        ))
+        Ok(Self {
+            materials,
+            mat_unk1s,
+            mat_consts,
+            mat_textures,
+            mat_unknown3s,
+            mat_unknown4s,
+        })
     }
 }
 
@@ -78,7 +74,7 @@ impl Matlib {
 #[repr(C)]
 pub struct MaterialBlock {
     /// Number of [MaterialData] immediately after this header.
-    pub num_materials: i32,
+    pub num_materials: u32,
     /// Always Zero.
     pub unknown_04: i32,
     /// Always Zero.
@@ -86,23 +82,36 @@ pub struct MaterialBlock {
     /// Always Zero.
     pub unknown_0c: i32,
     /// Shader constants are just standard floats
-    pub num_shader_consts: i32,
+    pub num_shader_consts: u32,
     /// Always Zero.
     pub unknown_14: i32,
     /// Always Zero.
     pub unknown_18: i32,
-    pub num_mat_unknown3: i32,
+    pub num_mat_unknown3: u32,
     /// Always Zero.
     pub unknown_20: i32,
 }
 
 impl MaterialBlock {
+    pub const MAX_MATERIALS: u32 = 200;
+    pub const MAX_CONSTANTS: u32 = 1000;
+    pub const MAX_UKNOWN3S: u32 = 100;
+
     pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
 
+        let num_materials = read_u32_le(buf, 0x0);
+        if num_materials > Self::MAX_MATERIALS {
+            return Err(VolitionError::ValueTooHigh {
+                field: "MaterialBlock::num_materials",
+                max: Self::MAX_MATERIALS as usize,
+                got: num_materials as usize,
+            });
+        }
+
         let unknown_04 = read_i32_le(buf, 0x4);
         if unknown_04 != 0 {
-            return Err(VolitionError::UnexpectedValue {
+            return Err(VolitionError::ExpectedExactValue {
                 field: "MaterialBlock::unknown_04",
                 expected: 0,
                 got: unknown_04,
@@ -111,7 +120,7 @@ impl MaterialBlock {
 
         let unknown_08 = read_i32_le(buf, 0x8);
         if unknown_08 != 0 {
-            return Err(VolitionError::UnexpectedValue {
+            return Err(VolitionError::ExpectedExactValue {
                 field: "MaterialBlock::unknown_08",
                 expected: 0,
                 got: unknown_08,
@@ -120,16 +129,25 @@ impl MaterialBlock {
 
         let unknown_0c = read_i32_le(buf, 0xc);
         if unknown_0c != 0 {
-            return Err(VolitionError::UnexpectedValue {
+            return Err(VolitionError::ExpectedExactValue {
                 field: "MaterialBlock::unknown_0c",
                 expected: 0,
                 got: unknown_0c,
             });
         }
 
+        let num_shader_consts = read_u32_le(buf, 0x10);
+        if num_shader_consts > Self::MAX_CONSTANTS {
+            return Err(VolitionError::ValueTooHigh {
+                field: "MaterialBlock::num_shader_consts",
+                max: Self::MAX_CONSTANTS as usize,
+                got: num_shader_consts as usize,
+            });
+        }
+
         let unknown_14 = read_i32_le(buf, 0x14);
         if unknown_14 != 0 {
-            return Err(VolitionError::UnexpectedValue {
+            return Err(VolitionError::ExpectedExactValue {
                 field: "MaterialBlock::unknown_14",
                 expected: 0,
                 got: unknown_14,
@@ -138,16 +156,24 @@ impl MaterialBlock {
 
         let unknown_18 = read_i32_le(buf, 0x18);
         if unknown_18 != 0 {
-            return Err(VolitionError::UnexpectedValue {
+            return Err(VolitionError::ExpectedExactValue {
                 field: "MaterialBlock::unknown_18",
                 expected: 0,
                 got: unknown_18,
             });
         }
+        let num_mat_unknown3 = read_u32_le(buf, 0x1c);
+        if num_mat_unknown3 > Self::MAX_UKNOWN3S {
+            return Err(VolitionError::ValueTooHigh {
+                field: "MaterialBlock::num_mat_unknown3",
+                max: Self::MAX_UKNOWN3S as usize,
+                got: num_mat_unknown3 as usize,
+            });
+        }
 
         let unknown_20 = read_i32_le(buf, 0x20);
         if unknown_20 != 0 {
-            return Err(VolitionError::UnexpectedValue {
+            return Err(VolitionError::ExpectedExactValue {
                 field: "MaterialBlock::unknown_20",
                 expected: 0,
                 got: unknown_20,
@@ -155,14 +181,14 @@ impl MaterialBlock {
         }
 
         Ok(Self {
-            num_materials: read_i32_le(buf, 0x0),
+            num_materials,
             unknown_04,
             unknown_08,
             unknown_0c,
-            num_shader_consts: read_i32_le(buf, 0x10),
+            num_shader_consts,
             unknown_14,
             unknown_18,
-            num_mat_unknown3: read_i32_le(buf, 0x1c),
+            num_mat_unknown3,
             unknown_20,
         })
     }

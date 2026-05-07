@@ -63,9 +63,16 @@ impl VModelViewer {
     }
 
     fn open_model(&mut self, file_path: PathBuf) -> Result<(), VolitionError> {
-        //self.log_text(format!("Opening {file_path:?}"));
+        self.log_text(format!("Opening {file_path:?}"));
         let buf = std::fs::read(&file_path)?;
-        let smesh = StaticMesh::from_data(&buf)?;
+        let mut data_offset = 0;
+        let smesh = match StaticMesh::from_data(&buf, &mut data_offset) {
+            Ok(smesh) => smesh,
+            Err(e) => {
+                println!("off: {data_offset:#X?}");
+                return Err(e);
+            }
+        };
         self.log_text(format!("submeshes: {:#?}", smesh.mesh.submeshes.len()));
         let dump_path = file_path
             .with_added_extension("cpu")

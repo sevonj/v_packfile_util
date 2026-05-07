@@ -13,10 +13,15 @@ pub enum VolitionError {
     IoErr {
         src: std::io::Error,
     },
-    UnexpectedValue {
+    ExpectedExactValue {
         field: &'static str,
         expected: i32,
         got: i32,
+    },
+    ValueTooHigh {
+        field: &'static str,
+        max: usize,
+        got: usize,
     },
     InvalidString {
         offset: usize,
@@ -45,13 +50,17 @@ impl std::fmt::Display for VolitionError {
                 "Not enough bytes for {for_what:?}: need {need:?}, available {avail:?}"
             ),
             IoErr { src } => src.fmt(f),
-            UnexpectedValue {
+            ExpectedExactValue {
                 field,
                 expected,
                 got,
             } => write!(
                 f,
                 "Unexpected value for `{field}`: expected {expected}, got {got}"
+            ),
+            ValueTooHigh { field, max, got } => write!(
+                f,
+                "Value for `{field}` was larger than expected: max {max}, got {got}"
             ),
             InvalidString { offset } => write!(f, "Invalid string at offset: {offset:X?}"),
             CStringRanOutOfBytes(len) => {

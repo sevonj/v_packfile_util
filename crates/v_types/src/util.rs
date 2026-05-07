@@ -55,6 +55,6 @@ pub fn read_cstr(buf: &[u8], offset: usize) -> Result<&str, VolitionError> {
     std::str::from_utf8(&buf[..len]).map_err(|_| VolitionError::InvalidString { offset })
 }
 
-pub fn align_16(offset: &mut usize) {
-    *offset = offset.div_ceil(16) * 16;
+pub fn align(offset: &mut usize, align: usize) {
+    *offset = offset.div_ceil(align) * align;
 }

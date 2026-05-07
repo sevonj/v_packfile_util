@@ -28,6 +28,11 @@ impl Vector {
             z: read_f32_le(buf, 0x8),
         })
     }
+
+    /// Returns `true` if any component is NaN.
+    pub const fn is_nan(&self) -> bool {
+        self.x.is_nan() || self.y.is_nan() || self.z.is_nan()
+    }
 }
 
 #[cfg(test)]

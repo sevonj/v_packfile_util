@@ -17,4 +17,9 @@ impl AABB {
             max: Vector::from_data(&buf[12..])?,
         })
     }
+
+    /// Returns `true` if any component is NaN.
+    pub const fn is_nan(&self) -> bool {
+        self.min.is_nan() || self.max.is_nan()
+    }
 }

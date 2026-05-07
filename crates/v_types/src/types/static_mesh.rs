@@ -20,60 +20,53 @@ pub struct StaticMesh {
 }
 
 impl StaticMesh {
-    pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
+    pub fn from_data(buf: &[u8], data_offset: &mut usize) -> Result<Self, VolitionError> {
         let header = StaticMeshHeader::from_data(buf)?;
 
         let num_textures = header.num_textures as usize;
         let num_navpoints = header.num_navpoints as usize;
         let num_bones = header.num_bones as usize;
 
-        let mut data_offset = 0x40;
+        *data_offset += 0x40;
 
         let mut texture_flags = Vec::with_capacity(num_textures);
         for _ in 0..num_textures {
-            texture_flags.push(read_i32_le(buf, data_offset));
-            data_offset += 4;
+            texture_flags.push(read_i32_le(buf, *data_offset));
+            *data_offset += 4;
         }
 
-        align_16(&mut data_offset);
-        data_offset += 1; // for some there's an extra null byte at start 
+        align(data_offset, 16);
+        *data_offset += 1; // for some there's an extra null byte at start 
         let mut texture_names = Vec::with_capacity(num_textures);
         for _ in 0..num_textures {
-            let name = read_cstr(buf, data_offset)?;
-            data_offset += name.len();
-            data_offset += 1; // nullterm
+            let name = read_cstr(buf, *data_offset)?;
+            *data_offset += name.len();
+            *data_offset += 1; // nullterm
             texture_names.push(name.to_string());
         }
 
         let mut navpoints = Vec::with_capacity(num_navpoints);
         if num_navpoints > 0 {
-            align_16(&mut data_offset);
+            align(data_offset, 16);
             for _ in 0..num_navpoints {
-                navpoints.push(StaticMeshNavPoint::from_data(&buf[data_offset..])?);
-                data_offset += size_of::<StaticMeshNavPoint>();
+                navpoints.push(StaticMeshNavPoint::from_data(&buf[*data_offset..])?);
+                *data_offset += size_of::<StaticMeshNavPoint>();
             }
         }
 
         let mut bone_indices = Vec::with_capacity(num_bones);
         if num_bones > 0 {
-            align_16(&mut data_offset);
+            align(data_offset, 16);
             for _ in 0..num_bones {
-                bone_indices.push(read_i32_le(buf, data_offset));
-                data_offset += 4;
+                bone_indices.push(read_i32_le(buf, *data_offset));
+                *data_offset += 4;
             }
         }
 
-        let matlib = {
-            let (matlib, len) = Matlib::from_data(&buf[data_offset..])?;
-            data_offset += len;
-            matlib
-        };
+        align(data_offset, 4);
+        let matlib = Matlib::from_data(buf, data_offset)?;
 
-        let mesh = {
-            let (mesh, len) = Mesh::from_data(&buf[data_offset..], header.unk_2c)?;
-            data_offset += len;
-            mesh
-        };
+        let mesh = Mesh::from_data(buf, data_offset, header.unk_2c)?;
 
         println!("end: {data_offset:#X?}");
 
@@ -134,13 +127,13 @@ pub struct StaticMeshHeader {
     pub version: i16,
     pub mesh_flags: i16,
     pub unk_08: i32,
-    pub num_textures: i16,
-    pub num_navpoints: i16,
+    pub num_textures: u16,
+    pub num_navpoints: u16,
     pub unk_10: i32,
     pub bounding_center: Vector,
     pub bounding_radius: f32,
     /// maybe?
-    pub num_bones: i32,
+    pub num_bones: u32,
     pub unk_28: i32,
     pub unk_2c: i32,
 }
@@ -149,12 +142,16 @@ impl StaticMeshHeader {
     pub const SIGNATURE: i32 = 0x424BD00D;
     pub const VERSION: i16 = 33;
 
+    pub const MAX_TEXTURES: u16 = 100;
+    pub const MAX_NAVPOINTS: u16 = 100;
+    pub const MAX_BONES: u32 = 100;
+
     pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
 
         let magic = read_i32_le(buf, 0);
         if magic != Self::SIGNATURE {
-            return Err(VolitionError::UnexpectedValue {
+            return Err(VolitionError::ExpectedExactValue {
                 field: "StaticMesh::magic",
                 expected: Self::SIGNATURE,
                 got: magic,
@@ -166,17 +163,44 @@ impl StaticMeshHeader {
             return Err(VolitionError::UnknownStaticMeshVersion(version));
         }
 
+        let num_textures = read_u16_le(buf, 0xc);
+        if num_textures > Self::MAX_TEXTURES {
+            return Err(VolitionError::ValueTooHigh {
+                field: "StaticMeshHeader::num_textures",
+                max: Self::MAX_TEXTURES as usize,
+                got: num_textures as usize,
+            });
+        }
+
+        let num_navpoints = read_u16_le(buf, 0xe);
+        if num_navpoints > Self::MAX_NAVPOINTS {
+            return Err(VolitionError::ValueTooHigh {
+                field: "StaticMeshHeader::num_navpoints",
+                max: Self::MAX_NAVPOINTS as usize,
+                got: num_navpoints as usize,
+            });
+        }
+
+        let num_bones = read_u32_le(buf, 0x24);
+        if num_bones > Self::MAX_BONES {
+            return Err(VolitionError::ValueTooHigh {
+                field: "StaticMeshHeader::num_bones",
+                max: Self::MAX_BONES as usize,
+                got: num_bones as usize,
+            });
+        }
+
         Ok(Self {
             magic,
             version,
             mesh_flags: read_i16_le(buf, 0x6),
             unk_08: read_i32_le(buf, 0x8),
-            num_textures: read_i16_le(buf, 0xc),
-            num_navpoints: read_i16_le(buf, 0xe),
+            num_textures,
+            num_navpoints,
             unk_10: read_i32_le(buf, 0x10),
             bounding_center: Vector::from_data(&buf[0x14..])?,
             bounding_radius: read_f32_le(buf, 0x20),
-            num_bones: read_i32_le(buf, 0x24),
+            num_bones,
             unk_28: read_i32_le(buf, 0x28),
             unk_2c: read_i32_le(buf, 0x2c),
         })

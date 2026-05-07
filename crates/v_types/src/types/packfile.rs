@@ -118,7 +118,7 @@ impl Packfile {
 
         let len_compressed = read_i32_le(buf, 0x16c);
         if len_compressed != -1 {
-            return Err(VolitionError::UnexpectedValue {
+            return Err(VolitionError::ExpectedExactValue {
                 field: "Packfile::len_compressed",
                 expected: -1,
                 got: len_compressed,
@@ -127,7 +127,7 @@ impl Packfile {
 
         let open_count_maybe = read_i32_le(buf, 0x17c);
         if open_count_maybe != 0 {
-            return Err(VolitionError::UnexpectedValue {
+            return Err(VolitionError::ExpectedExactValue {
                 field: "Packfile::open_count_maybe",
                 expected: 0,
                 got: open_count_maybe,
@@ -262,7 +262,7 @@ impl PackfileEntry {
         let runtime_18 = read_i32_le(buf, 0x18);
 
         if runtime_14 != -1 {
-            return Err(VolitionError::UnexpectedValue {
+            return Err(VolitionError::ExpectedExactValue {
                 field: "PackfileEntry::runtime_14",
                 expected: -1,
                 got: runtime_14,
@@ -270,7 +270,7 @@ impl PackfileEntry {
         }
 
         if runtime_18 != 0 {
-            return Err(VolitionError::UnexpectedValue {
+            return Err(VolitionError::ExpectedExactValue {
                 field: "PackfileEntry::runtime_18",
                 expected: 0,
                 got: runtime_18,
