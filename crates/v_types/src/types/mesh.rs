@@ -427,7 +427,7 @@ pub struct Surface {
     pub start_index: i32,
     /// First vertex
     pub start_vertex: i32,
-    pub num_indices: i16,
+    pub num_indices: u16,
     pub material: i16,
 }
 
@@ -438,7 +438,7 @@ impl Surface {
             vbuf: read_i32_le(buf, 0x0),
             start_index: read_i32_le(buf, 0x4),
             start_vertex: read_i32_le(buf, 0x8),
-            num_indices: read_i16_le(buf, 0xc),
+            num_indices: read_u16_le(buf, 0xc),
             material: read_i16_le(buf, 0xe),
         })
     }
@@ -495,7 +495,7 @@ pub struct VertexBufferHeader {
     pub vertex_format: u8,
     pub num_uvs: u8,
     pub stride: u16,
-    pub num_vertices: i32,
+    pub num_vertices: u32,
     pub ptr_render_data: i32,
     pub unk_0c: i32,
 }
@@ -517,7 +517,7 @@ impl VertexBufferHeader {
             vertex_format: buf[0],
             num_uvs: buf[1],
             stride: read_u16_le(buf, 0x2),
-            num_vertices: read_i32_le(buf, 0x4),
+            num_vertices: read_u32_le(buf, 0x4),
             ptr_render_data: unk_08,
             unk_0c: read_i32_le(buf, 0xc),
         })
