@@ -345,16 +345,17 @@ impl MeshHeader {
 
 #[derive(Debug, Clone)]
 pub struct Submesh {
-    /// Headers to data that lives in VRAM
+    /// Headers for geometry that lives in VRAM
+    /// Not tested, but probably always present
     pub gpu: Option<SubmeshData>,
-    /// Headers to data that lives on CPU RAM
+    /// Headers for geometry that lives in CPU RAM
     /// CPU geometry always has exactly one vertex buffer
     pub cpu: Option<SubmeshData>,
     /// CPU vertex buffer in raw bytes. Empty if `cpu` == `None`
-    /// Format is always f32
+    /// Format is always f32 coords with no extra attributes
     pub cpu_vdata: Vec<u8>,
     /// CPU index buffer in raw bytes. Empty if `cpu` == `None`
-    /// Format is always u16
+    /// Format is always u16 tri-strip
     pub cpu_idata: Vec<u8>,
 }
 

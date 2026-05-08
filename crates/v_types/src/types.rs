@@ -14,7 +14,6 @@ pub use material::MaterialUnknown3;
 pub use material::Matlib;
 pub use mesh::IndexBufferHeader;
 pub use mesh::MeshHeader;
-pub use mesh::Submeshes;
 pub use mesh::Surface;
 pub use mesh::SurfaceHeader;
 pub use mesh::VertexBufferHeader;
