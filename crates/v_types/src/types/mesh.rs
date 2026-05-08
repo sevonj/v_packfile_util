@@ -44,8 +44,6 @@ enum VertexAttributeTypes {
     Num,
 }
 
-pub type Submeshes = Vec<(SurfaceHeader, Vec<Surface>)>;
-
 #[derive(Debug, Clone)]
 pub struct Mesh {
     pub header: MeshHeader,
