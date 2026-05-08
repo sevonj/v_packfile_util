@@ -88,7 +88,7 @@ impl StaticMesh {
 
         let mut next_index = 1;
         for (i, submesh) in self.mesh.submeshes.iter().enumerate() {
-            let Some(cpu_data) = &submesh.cpu_data else {
+            let Some(cpu_submesh) = &submesh.cpu else {
                 continue;
             };
             out += &format!("g submesh_{}\n", i);
@@ -96,19 +96,19 @@ impl StaticMesh {
             let vbuf = &submesh.cpu_vdata;
             let mut voff = 0;
             let mut added_vertices = 0;
-            for head in &submesh.cpu_vbufs {
-                assert_eq!(head.stride, 12);
-                for _ in 0..head.num_vertices {
+            for vhead in &cpu_submesh.vertex_headers {
+                assert_eq!(vhead.stride, 12);
+                for _ in 0..vhead.num_vertices {
                     let v = Vector::from_data(&vbuf[voff..]).unwrap();
                     out += &format!("v {} {} {}\n", v.x, v.y, v.z);
                     voff += 12;
                 }
-                added_vertices += head.num_vertices as usize;
+                added_vertices += vhead.num_vertices as usize;
             }
 
             let ibuf = &submesh.cpu_idata;
             let mut ioff = 0;
-            for _ in 0..cpu_data.num_indices - 2 {
+            for _ in 0..cpu_submesh.index_header.num_indices - 2 {
                 let a = next_index + read_u16_le(ibuf, ioff) as usize;
                 let b = next_index + read_u16_le(ibuf, ioff + 2) as usize;
                 let c = next_index + read_u16_le(ibuf, ioff + 4) as usize;
