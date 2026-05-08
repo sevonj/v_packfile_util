@@ -45,8 +45,6 @@ impl Matlib {
 
         align(data_offset, 16);
 
-        println!("mat: {data_offset:#X?}");
-
         let mut mat_consts = Vec::with_capacity(num_mat_consts);
         for _ in 0..num_mat_consts {
             let value = read_f32_le(buf, *data_offset);

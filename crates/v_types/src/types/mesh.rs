@@ -169,6 +169,10 @@ impl Mesh {
 
         Ok(Self { header, submeshes })
     }
+
+    pub const fn has_cpu_geometry(&self) -> bool {
+        self.header.has_cpu_submeshes()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -349,10 +353,11 @@ pub struct Submesh {
     /// Not tested, but probably always present
     pub gpu: Option<SubmeshData>,
     /// Headers for geometry that lives in CPU RAM
-    /// CPU geometry always has exactly one vertex buffer
+    /// Purpose unknown, sometimes not present
+    /// No materials or attributes; it always has exactly one vertex buffer
     pub cpu: Option<SubmeshData>,
     /// CPU vertex buffer in raw bytes. Empty if `cpu` == `None`
-    /// Format is always f32 coords with no extra attributes
+    /// Format is always 3xf32 coords only
     pub cpu_vdata: Vec<u8>,
     /// CPU index buffer in raw bytes. Empty if `cpu` == `None`
     /// Format is always u16 tri-strip

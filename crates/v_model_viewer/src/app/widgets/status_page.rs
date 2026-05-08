@@ -18,7 +18,7 @@ impl<'a> StatusPage<'a> {
 
 impl Widget for StatusPage<'_> {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
-        CentralPanel::default()
+        CentralPanel::no_frame()
             .show_inside(ui, |ui| {
                 ui.vertical_centered(|ui| {
                     ui.heading(self.title);

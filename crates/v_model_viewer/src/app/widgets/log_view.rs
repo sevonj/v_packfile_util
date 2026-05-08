@@ -19,7 +19,7 @@ impl<'a> LogView<'a> {
 
 impl Widget for LogView<'_> {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
-        CentralPanel::default()
+        CentralPanel::no_frame()
             .show_inside(ui, |ui| {
                 ScrollArea::new(Vec2b::new(false, true)).show(ui, |ui| {
                     ui.vertical(|ui| {

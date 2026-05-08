@@ -33,6 +33,12 @@ impl Vector {
     pub const fn is_nan(&self) -> bool {
         self.x.is_nan() || self.y.is_nan() || self.z.is_nan()
     }
+
+    /// Magnitude
+    pub fn length(&self) -> f32 {
+        let sq = self.x * self.x + self.y * self.y + self.z * self.z;
+        sq.sqrt()
+    }
 }
 
 #[cfg(test)]

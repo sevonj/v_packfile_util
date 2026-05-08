@@ -6,6 +6,9 @@ use std::path::PathBuf;
 
 use eframe::App;
 use eframe::CreationContext;
+use egui::CentralPanel;
+use egui::Color32;
+use egui::Frame;
 use egui::Ui;
 use rfd::FileDialog;
 use v_types::StaticMesh;
@@ -16,7 +19,7 @@ pub struct ModelData {
     pub file_path: PathBuf,
 }
 
-// use crate::app::ui::ModelView;
+use crate::app::ui::ModelView;
 use crate::app::widgets::LogView;
 use crate::app::widgets::StatusPage;
 use data::AppState;
@@ -25,22 +28,17 @@ use data::AppTab;
 pub struct VModelViewer {
     state: AppState,
     model_data: Option<ModelData>,
-    // model_view: Option<ModelView>,
+    model_view: Option<ModelView>,
 }
 
 impl VModelViewer {
     pub fn new(cc: &CreationContext<'_>) -> Self {
         cc.egui_ctx.set_theme(eframe::egui::Theme::Dark);
 
-        // let model_view = cc
-        //     .wgpu_render_state
-        //     .as_ref()
-        //     .map(|render_state| ModelView::placeholder(render_state));
-
         let mut this = Self {
             state: AppState::default(),
             model_data: None,
-            // model_view,
+            model_view: None,
         };
         this.log_text(String::from("Hello there!"));
         this
@@ -61,6 +59,34 @@ impl VModelViewer {
             return;
         };
         self.try_open_model(file_path);
+    }
+
+    fn prompt_dump_cpu(&mut self) {
+        let Some(model_data) = &self.model_data else {
+            return;
+        };
+
+        let Some(file_path) = FileDialog::new()
+            .set_file_name(
+                model_data
+                    .file_path
+                    .with_extension("obj")
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy(),
+            )
+            .add_filter("Wavefront .obj", &["obj"])
+            .save_file()
+        else {
+            return;
+        };
+
+        let contents = model_data.smesh.dump_wavefront_cpu();
+        if !contents.is_empty()
+            && let Err(e) = std::fs::write(file_path, contents.as_bytes())
+        {
+            self.log_err(&e.into());
+        }
     }
 
     fn try_open_model(&mut self, file_path: PathBuf) {
@@ -86,20 +112,13 @@ impl VModelViewer {
         };
 
         self.model_data = Some(ModelData { smesh, file_path });
-
-        // let dump_path = file_path
-        //     .with_added_extension("cpu")
-        //     .with_added_extension("obj");
-        // let contents = smesh.dump_wavefront_cpu();
-        // if !contents.is_empty() {
-        //     std::fs::write(dump_path, contents.as_bytes())?;
-        // }
         Ok(())
     }
 
     fn close_file(&mut self) {
         self.log_text("Closing file".to_string());
         self.model_data = None;
+        self.model_view = None;
     }
 
     fn log_err(&mut self, e: &VolitionError) {
@@ -116,28 +135,34 @@ impl VModelViewer {
 }
 
 impl App for VModelViewer {
-    fn ui(&mut self, ui: &mut Ui, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
         self.menu_bar(ui);
         ui.add_space(1.0);
 
-        match self.state.tab {
-            AppTab::View => {
-                if let Some(model_data) = &self.model_data {
-                    ui.monospace(model_data.file_path.file_name().unwrap().to_string_lossy());
-                    ui.label("todo");
-                    // if let Some(model_view) = self.model_view.as_mut() {
-                    //     model_view.ui(ui);
-                    // } else {
-                    //     ui.label("Failed to set up 3D view.");
-                    // }
-                } else {
-                    ui.add(StatusPage::status_no_file());
+        let fill = Color32::from_hex("#3F3F3F").unwrap();
+        CentralPanel::default()
+            .frame(Frame::central_panel(ui.style()).fill(fill))
+            .show_inside(ui, |ui| match self.state.tab {
+                AppTab::View => {
+                    if let Some(model_data) = &self.model_data {
+                        if self.model_view.is_none()
+                            && let Some(render_state) = frame.wgpu_render_state()
+                        {
+                            self.model_view = Some(ModelView::new(render_state, &model_data.smesh));
+                        }
+                        if let Some(model_view) = self.model_view.as_mut() {
+                            model_view.ui(ui, model_data);
+                        } else {
+                            ui.label("Failed to set up 3D view.");
+                        }
+                    } else {
+                        ui.add(StatusPage::status_no_file());
+                    }
                 }
-            }
-            AppTab::Log => {
-                ui.add(LogView::new(&self.state.log));
-            }
-        }
+                AppTab::Log => {
+                    ui.add(LogView::new(&self.state.log));
+                }
+            });
 
         ui.input(|i| {
             //let Some(file) = i.raw.dropped_files.first() else {
