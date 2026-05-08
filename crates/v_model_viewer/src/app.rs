@@ -63,23 +63,23 @@ impl VModelViewer {
     }
 
     fn open_model(&mut self, file_path: PathBuf) -> Result<(), VolitionError> {
-        self.log_text(format!("Opening {file_path:?}"));
+        // self.log_text(format!("Opening {file_path:?}"));
         let buf = std::fs::read(&file_path)?;
         let mut data_offset = 0;
         let smesh = match StaticMesh::from_data(&buf, &mut data_offset) {
             Ok(smesh) => smesh,
             Err(e) => {
-                println!("off: {data_offset:#X?}");
+                println!("{file_path:?} off: {data_offset:#X?}");
                 return Err(e);
             }
         };
-        self.log_text(format!("submeshes: {:#?}", smesh.mesh.submeshes.len()));
         let dump_path = file_path
             .with_added_extension("cpu")
             .with_added_extension("obj");
-        println!("dumping: {dump_path:#?}");
-        std::fs::write(dump_path, smesh.dump_wavefront_cpu().as_bytes())?;
-
+        let contents = smesh.dump_wavefront_cpu();
+        if !contents.is_empty() {
+            std::fs::write(dump_path, contents.as_bytes())?;
+        }
         Ok(())
     }
 
@@ -124,13 +124,18 @@ impl App for VModelViewer {
         }
 
         ui.input(|i| {
-            let Some(file) = i.raw.dropped_files.first() else {
-                return;
-            };
-            let Some(file_path) = file.path.clone() else {
-                return;
-            };
-            self.try_open_model(file_path);
+            //let Some(file) = i.raw.dropped_files.first() else {
+            //    return;
+            //};
+            //let Some(file_path) = file.path.clone() else {
+            //    return;
+            //};
+
+            for file in &i.raw.dropped_files {
+                if let Some(file_path) = file.path.clone() {
+                    self.try_open_model(file_path);
+                }
+            }
         });
     }
 }

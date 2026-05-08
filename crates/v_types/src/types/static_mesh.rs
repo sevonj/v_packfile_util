@@ -5,6 +5,10 @@ use crate::VolitionError;
 use crate::types::mesh::Mesh;
 use crate::util::*;
 
+pub const MAX_TEXTURES: u16 = 100;
+pub const MAX_NAVPOINTS: u16 = 100;
+pub const MAX_BONES: u32 = 100;
+
 /// Deserialized cmesh/smesh
 #[derive(Debug, Clone)]
 pub struct StaticMesh {
@@ -67,8 +71,6 @@ impl StaticMesh {
         let matlib = Matlib::from_data(buf, data_offset)?;
 
         let mesh = Mesh::from_data(buf, data_offset, header.unk_2c)?;
-
-        println!("end: {data_offset:#X?}");
 
         Ok(Self {
             header,
@@ -142,10 +144,6 @@ impl StaticMeshHeader {
     pub const SIGNATURE: i32 = 0x424BD00D;
     pub const VERSION: i16 = 33;
 
-    pub const MAX_TEXTURES: u16 = 100;
-    pub const MAX_NAVPOINTS: u16 = 100;
-    pub const MAX_BONES: u32 = 100;
-
     pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
 
@@ -164,28 +162,28 @@ impl StaticMeshHeader {
         }
 
         let num_textures = read_u16_le(buf, 0xc);
-        if num_textures > Self::MAX_TEXTURES {
+        if num_textures > MAX_TEXTURES {
             return Err(VolitionError::ValueTooHigh {
                 field: "StaticMeshHeader::num_textures",
-                max: Self::MAX_TEXTURES as usize,
+                max: MAX_TEXTURES as usize,
                 got: num_textures as usize,
             });
         }
 
         let num_navpoints = read_u16_le(buf, 0xe);
-        if num_navpoints > Self::MAX_NAVPOINTS {
+        if num_navpoints > MAX_NAVPOINTS {
             return Err(VolitionError::ValueTooHigh {
                 field: "StaticMeshHeader::num_navpoints",
-                max: Self::MAX_NAVPOINTS as usize,
+                max: MAX_NAVPOINTS as usize,
                 got: num_navpoints as usize,
             });
         }
 
         let num_bones = read_u32_le(buf, 0x24);
-        if num_bones > Self::MAX_BONES {
+        if num_bones > MAX_BONES {
             return Err(VolitionError::ValueTooHigh {
                 field: "StaticMeshHeader::num_bones",
-                max: Self::MAX_BONES as usize,
+                max: MAX_BONES as usize,
                 got: num_bones as usize,
             });
         }

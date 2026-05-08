@@ -18,10 +18,18 @@ pub enum VolitionError {
         expected: i32,
         got: i32,
     },
+    UnexpectedValue {
+        desc: &'static str,
+        got: i32,
+    },
     ValueTooHigh {
         field: &'static str,
         max: usize,
         got: usize,
+    },
+    NonsensicalFloat {
+        field: &'static str,
+        got: f32,
     },
     InvalidString {
         offset: usize,
@@ -58,9 +66,15 @@ impl std::fmt::Display for VolitionError {
                 f,
                 "Unexpected value for `{field}`: expected {expected}, got {got}"
             ),
+            &UnexpectedValue { desc, got } => write!(f, "Unexpected value: {desc}, got {got}"),
             ValueTooHigh { field, max, got } => write!(
                 f,
                 "Value for `{field}` was larger than expected: max {max}, got {got}"
+            ),
+            NonsensicalFloat { field, got } => write!(
+                f,
+                "Nonsensical float in `{field}`: got {got} ({:08X?})",
+                u32::from_le_bytes(got.to_le_bytes())
             ),
             InvalidString { offset } => write!(f, "Invalid string at offset: {offset:X?}"),
             CStringRanOutOfBytes(len) => {

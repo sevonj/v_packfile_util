@@ -190,13 +190,29 @@ impl MeshHeader {
             });
         }
 
+        let ptr_submesh_a = read_i32_le(buf, 0x20);
+        if ![0, -1].contains(&ptr_submesh_a) {
+            return Err(VolitionError::UnexpectedValue {
+                desc: "MeshData::ptr_submesh_a should be either -1 or 0",
+                got: ptr_submesh_a,
+            });
+        }
+
+        let ptr_submesh_b = read_i32_le(buf, 0x24);
+        if ![0, -1].contains(&ptr_submesh_b) {
+            return Err(VolitionError::UnexpectedValue {
+                desc: "MeshData::ptr_submesh_b should be either -1 or 0",
+                got: ptr_submesh_b,
+            });
+        }
+
         Ok(Self {
             aabb: AABB::from_data(buf)?,
             unk_18: read_i32_le(buf, 0x18),
             num_submeshes,
             unk_1e: read_i16_le(buf, 0x1e),
-            ptr_submesh_a: read_i32_le(buf, 0x20),
-            ptr_submesh_b: read_i32_le(buf, 0x24),
+            ptr_submesh_a,
+            ptr_submesh_b,
         })
     }
 
@@ -254,18 +270,30 @@ impl MeshHeader {
 #[repr(C)]
 pub struct SubmeshHeader {
     pub unk_00: i16,
-    pub num_surfaces: i16,
+    pub num_surfaces: u16,
     pub unk_04: i32,
     pub unk_08: i32,
     pub unk_0c: i32,
 }
 
 impl SubmeshHeader {
+    pub const MAX_SURFACES: u16 = 100;
+
     pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
+
+        let num_surfaces = read_u16_le(buf, 0x2);
+        if num_surfaces > Self::MAX_SURFACES {
+            return Err(VolitionError::ValueTooHigh {
+                field: "SubmeshHeader::num_surfaces",
+                max: Self::MAX_SURFACES as usize,
+                got: num_surfaces as usize,
+            });
+        }
+
         Ok(Self {
             unk_00: read_i16_le(buf, 0x0),
-            num_surfaces: read_i16_le(buf, 0x2),
+            num_surfaces,
             unk_04: read_i32_le(buf, 0x4),
             unk_08: read_i32_le(buf, 0x8),
             unk_0c: read_i32_le(buf, 0xc),

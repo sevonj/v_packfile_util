@@ -1,6 +1,12 @@
 use crate::VolitionError;
 use crate::util::*;
 
+pub const MAX_MATERIALS: u32 = 200;
+pub const MAX_CONSTANTS: u32 = 1000;
+pub const MAX_UKNOWN3S: u32 = 500;
+pub const MAX_UKNOWN4S: u16 = 50;
+pub const MAX_UKNOWN4_VALUE: usize = 0xffff;
+
 #[derive(Debug, Clone)]
 pub struct Matlib {
     pub materials: Vec<Material>,
@@ -26,6 +32,11 @@ impl Matlib {
             *data_offset += size_of::<Material>();
         }
 
+        for material in &materials {
+            align(data_offset, 4);
+            *data_offset += material.num_unknown as usize * 6;
+        }
+
         let mut mat_unk1s: Vec<[u8; 16]> = Vec::with_capacity(num_materials);
         for _ in 0..num_materials {
             mat_unk1s.push(read_bytes(buf, *data_offset));
@@ -33,16 +44,35 @@ impl Matlib {
         }
 
         align(data_offset, 16);
+
         let mut mat_consts = Vec::with_capacity(num_mat_consts);
         for _ in 0..num_mat_consts {
-            mat_consts.push(read_f32_le(buf, *data_offset));
+            let value = read_f32_le(buf, *data_offset);
+            validate_f32(value, "Material constant")?;
+            mat_consts.push(value);
             *data_offset += 4;
         }
 
         let mut mat_textures = Vec::with_capacity(num_materials);
-        for _ in 0..(num_materials * 16) {
-            mat_textures.push(MaterialTextureEntry::from_data(&buf[*data_offset..])?);
-            *data_offset += size_of::<MaterialTextureEntry>();
+        for material in &materials {
+            for i in 0..16 {
+                let entry = MaterialTextureEntry::from_data(&buf[*data_offset..])?;
+                if i < material.num_textures && !entry.is_valid() {
+                    let got = read_i32_le(buf, *data_offset);
+                    return Err(VolitionError::UnexpectedValue {
+                        desc: "Found invalid MaterialTextureEntry in used range",
+                        got,
+                    });
+                } else if i >= material.num_textures && !entry.is_placeholder() {
+                    let got = read_i32_le(buf, *data_offset);
+                    return Err(VolitionError::UnexpectedValue {
+                        desc: "Found non-placeholder MaterialTextureEntry in unused range",
+                        got,
+                    });
+                }
+                mat_textures.push(entry);
+                *data_offset += size_of::<MaterialTextureEntry>();
+            }
         }
 
         let mut mat_unknown3s = Vec::with_capacity(num_mat_unknown3);
@@ -54,7 +84,15 @@ impl Matlib {
         let mut mat_unknown4s = vec![];
         for unk3 in &mat_unknown3s {
             for _ in 0..unk3.num_mat_unk4 {
-                mat_unknown4s.push(read_i32_le(buf, *data_offset));
+                let value = read_i32_le(buf, *data_offset);
+                if value as usize > MAX_UKNOWN4_VALUE {
+                    return Err(VolitionError::ValueTooHigh {
+                        field: "Material unk4",
+                        max: MAX_UKNOWN4_VALUE,
+                        got: value as usize,
+                    });
+                }
+                mat_unknown4s.push(value);
                 *data_offset += 4;
             }
         }
@@ -93,18 +131,14 @@ pub struct MaterialBlock {
 }
 
 impl MaterialBlock {
-    pub const MAX_MATERIALS: u32 = 200;
-    pub const MAX_CONSTANTS: u32 = 1000;
-    pub const MAX_UKNOWN3S: u32 = 100;
-
     pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
 
         let num_materials = read_u32_le(buf, 0x0);
-        if num_materials > Self::MAX_MATERIALS {
+        if num_materials > MAX_MATERIALS {
             return Err(VolitionError::ValueTooHigh {
                 field: "MaterialBlock::num_materials",
-                max: Self::MAX_MATERIALS as usize,
+                max: MAX_MATERIALS as usize,
                 got: num_materials as usize,
             });
         }
@@ -137,10 +171,10 @@ impl MaterialBlock {
         }
 
         let num_shader_consts = read_u32_le(buf, 0x10);
-        if num_shader_consts > Self::MAX_CONSTANTS {
+        if num_shader_consts > MAX_CONSTANTS {
             return Err(VolitionError::ValueTooHigh {
                 field: "MaterialBlock::num_shader_consts",
-                max: Self::MAX_CONSTANTS as usize,
+                max: MAX_CONSTANTS as usize,
                 got: num_shader_consts as usize,
             });
         }
@@ -163,10 +197,10 @@ impl MaterialBlock {
             });
         }
         let num_mat_unknown3 = read_u32_le(buf, 0x1c);
-        if num_mat_unknown3 > Self::MAX_UKNOWN3S {
+        if num_mat_unknown3 > MAX_UKNOWN3S {
             return Err(VolitionError::ValueTooHigh {
                 field: "MaterialBlock::num_mat_unknown3",
-                max: Self::MAX_UKNOWN3S as usize,
+                max: MAX_UKNOWN3S as usize,
                 got: num_mat_unknown3 as usize,
             });
         }
@@ -253,6 +287,14 @@ pub struct MaterialTextureEntry {
 }
 
 impl MaterialTextureEntry {
+    pub const fn is_placeholder(&self) -> bool {
+        self.index == -1 && self.flags == -1
+    }
+
+    pub const fn is_valid(&self) -> bool {
+        self.index >= 0 && self.flags >= 0
+    }
+
     pub const fn placeholder() -> Self {
         Self {
             index: -1,
@@ -274,20 +316,39 @@ impl MaterialTextureEntry {
 pub struct MaterialUnknown3 {
     pub unk_00: i32,
     pub unk_04: i32,
-    pub num_mat_unk4: i16,
+    pub num_mat_unk4: u16,
     pub unk_06: i16,
-    pub runtime_08: i32,
+    pub ptr_08: i32,
 }
 
 impl MaterialUnknown3 {
     pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
+
+        let num_mat_unk4 = read_u16_le(buf, 0x8);
+        if num_mat_unk4 > MAX_UKNOWN4S {
+            return Err(VolitionError::ValueTooHigh {
+                field: "MaterialBlock::num_mat_unk4",
+                max: MAX_UKNOWN4S as usize,
+                got: num_mat_unk4 as usize,
+            });
+        }
+
+        let ptr_08 = read_i32_le(buf, 0xc);
+        if ptr_08 != -1 {
+            return Err(VolitionError::ExpectedExactValue {
+                field: "MaterialBlock::ptr_08",
+                expected: -1,
+                got: ptr_08,
+            });
+        }
+
         Ok(Self {
             unk_00: read_i32_le(buf, 0x0),
             unk_04: read_i32_le(buf, 0x4),
-            num_mat_unk4: read_i16_le(buf, 0x8),
+            num_mat_unk4,
             unk_06: read_i16_le(buf, 0xa),
-            runtime_08: read_i32_le(buf, 0xc),
+            ptr_08,
         })
     }
 }

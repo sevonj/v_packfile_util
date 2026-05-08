@@ -15,6 +15,14 @@ pub fn check_fits_buf<T>(buf: &[u8]) -> Result<(), VolitionError> {
     }
 }
 
+/// Errors if value is infinite, NaN, or subnormal
+pub const fn validate_f32(value: f32, field: &'static str) -> Result<(), VolitionError> {
+    if value.is_infinite() || value.is_nan() || value.is_subnormal() {
+        return Err(VolitionError::NonsensicalFloat { field, got: value });
+    }
+    Ok(())
+}
+
 pub fn read_i32_le(buf: &[u8], offset: usize) -> i32 {
     i32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap())
 }
