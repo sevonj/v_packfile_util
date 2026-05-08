@@ -237,7 +237,66 @@ impl StaticMeshNavPoint {
 #[cfg(test)]
 mod tests {
 
-    // use super::*;
+    use std::path::PathBuf;
+
+    use super::*;
+
+    #[test]
+    fn test_parse_every_smesh() {
+        // Unpacked meshes.vpp_pc
+        let samples_path = PathBuf::from("../../samples/meshes_extracted");
+
+        let mut num_failed = 0;
+        for entry in std::fs::read_dir(samples_path).unwrap() {
+            let entry = entry.unwrap();
+            let path = entry.path();
+
+            if !entry.metadata().unwrap().is_file() || path.extension().unwrap() != "smesh_pc" {
+                continue;
+            }
+
+            let buf = std::fs::read(&path).unwrap();
+            let mut offset = 0;
+            if let Err(e) = StaticMesh::from_data(&buf, &mut offset) {
+                num_failed += 1;
+                println!("ERR: {path:?} {offset:#X?} {e}");
+            }
+        }
+        println!("num_failed: {num_failed:?}");
+        assert_eq!(num_failed, 0);
+    }
+
+    #[test]
+    fn test_parse_every_smesh_reaches_end() {
+        // Unpacked meshes.vpp_pc
+        let samples_path = PathBuf::from("../../samples/meshes_extracted");
+
+        let mut num_failed = 0;
+        for entry in std::fs::read_dir(samples_path).unwrap() {
+            let entry = entry.unwrap();
+            let path = entry.path();
+
+            if !entry.metadata().unwrap().is_file() || path.extension().unwrap() != "smesh_pc" {
+                continue;
+            }
+
+            let buf = std::fs::read(&path).unwrap();
+            let mut offset = 0;
+            StaticMesh::from_data(&buf, &mut offset).unwrap();
+
+            align(&mut offset, 16);
+
+            if offset != buf.len() {
+                num_failed += 1;
+                println!(
+                    "Didn't reach end: {path:?} off: {offset:#X?}, end: {:#X?}",
+                    buf.len()
+                );
+            }
+        }
+        println!("num_failed: {num_failed:?}");
+        assert_eq!(num_failed, 0);
+    }
 
     // #[test]
     // fn test_static_mesh_size() {
