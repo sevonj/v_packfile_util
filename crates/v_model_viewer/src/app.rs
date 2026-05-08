@@ -11,13 +11,20 @@ use rfd::FileDialog;
 use v_types::StaticMesh;
 use v_types::VolitionError;
 
+pub struct ModelData {
+    pub smesh: StaticMesh,
+    pub file_path: PathBuf,
+}
+
 // use crate::app::ui::ModelView;
 use crate::app::widgets::LogView;
+use crate::app::widgets::StatusPage;
 use data::AppState;
 use data::AppTab;
 
 pub struct VModelViewer {
     state: AppState,
+    model_data: Option<ModelData>,
     // model_view: Option<ModelView>,
 }
 
@@ -32,6 +39,7 @@ impl VModelViewer {
 
         let mut this = Self {
             state: AppState::default(),
+            model_data: None,
             // model_view,
         };
         this.log_text(String::from("Hello there!"));
@@ -39,12 +47,12 @@ impl VModelViewer {
     }
 
     fn is_file_open(&self) -> bool {
-        false
+        self.model_data.is_some()
     }
 
     fn pick_model_file(&self) -> Option<PathBuf> {
         FileDialog::new()
-            .add_filter("SR2 Model Files", &["cmesh", "smesh"])
+            .add_filter("SR2 Model Files", &["cmesh_pc", "smesh_pc"])
             .pick_file()
     }
 
@@ -63,32 +71,35 @@ impl VModelViewer {
     }
 
     fn open_model(&mut self, file_path: PathBuf) -> Result<(), VolitionError> {
-        // self.log_text(format!("Opening {file_path:?}"));
+        self.log_text(format!("Opening {file_path:?}"));
+
+        self.close_file();
+
         let buf = std::fs::read(&file_path)?;
-        let mut data_offset = 0;
-        let smesh = match StaticMesh::from_data(&buf, &mut data_offset) {
+        let mut offset = 0;
+        let smesh = match StaticMesh::from_data(&buf, &mut offset) {
             Ok(smesh) => smesh,
             Err(e) => {
-                println!("{file_path:?} off: {data_offset:#X?}");
+                println!("{file_path:?} off: {offset:#X?}");
                 return Err(e);
             }
         };
-        let dump_path = file_path
-            .with_added_extension("cpu")
-            .with_added_extension("obj");
-        let contents = smesh.dump_wavefront_cpu();
-        if !contents.is_empty() {
-            std::fs::write(dump_path, contents.as_bytes())?;
-        }
+
+        self.model_data = Some(ModelData { smesh, file_path });
+
+        // let dump_path = file_path
+        //     .with_added_extension("cpu")
+        //     .with_added_extension("obj");
+        // let contents = smesh.dump_wavefront_cpu();
+        // if !contents.is_empty() {
+        //     std::fs::write(dump_path, contents.as_bytes())?;
+        // }
         Ok(())
     }
 
     fn close_file(&mut self) {
-        //  if !self.is_session_open() {
-        //      return;
-        //  }
-        //  self.log_text("Closing session".to_string());
-        //  self.session = Session::placeholder();
+        self.log_text("Closing file".to_string());
+        self.model_data = None;
     }
 
     fn log_err(&mut self, e: &VolitionError) {
@@ -111,12 +122,17 @@ impl App for VModelViewer {
 
         match self.state.tab {
             AppTab::View => {
-                // if let Some(model_view) = self.model_view.as_mut() {
-                //     model_view.ui(ui);
-                // } else {
-                //     ui.label("Failed to set up 3D view.");
-                // }
-                ui.label("todo");
+                if let Some(model_data) = &self.model_data {
+                    ui.monospace(model_data.file_path.file_name().unwrap().to_string_lossy());
+                    ui.label("todo");
+                    // if let Some(model_view) = self.model_view.as_mut() {
+                    //     model_view.ui(ui);
+                    // } else {
+                    //     ui.label("Failed to set up 3D view.");
+                    // }
+                } else {
+                    ui.add(StatusPage::status_no_file());
+                }
             }
             AppTab::Log => {
                 ui.add(LogView::new(&self.state.log));
