@@ -4,6 +4,8 @@ use std::time::Duration;
 use std::time::Instant;
 
 use eframe::egui_wgpu::RenderState;
+use egui::Button;
+use egui::Frame;
 use egui::Panel;
 use egui::ScrollArea;
 use egui::Sense;
@@ -17,6 +19,7 @@ use mesh_resources::StaticMeshResource;
 use v_types::StaticMesh;
 
 use crate::app::ModelData;
+use crate::app::style::OSD_FRAME;
 use crate::app::style::OSD_PANEL_FRAME;
 use crate::app::widgets::StaticMeshInspector;
 use crate::app::widgets::StatusPage;
@@ -39,6 +42,8 @@ pub struct ModelView {
     last_instant: Instant,
     last_touch: Instant,
     pub view_mode: ViewMode,
+    pub show_bbox: bool,
+    pub show_origin: bool,
 }
 
 impl ModelView {
@@ -67,6 +72,8 @@ impl ModelView {
             last_instant: Instant::now(),
             last_touch: Instant::now() - Duration::from_secs(SPIN_ENABLE_DELAY),
             view_mode: ViewMode::SampleText,
+            show_bbox: true,
+            show_origin: false,
         }
     }
 
@@ -91,7 +98,7 @@ impl ModelView {
             let eye = Mat4::from_rotation_x(self.angle_x)
                 .transform_vector3(self.camera_pos + Vec3::new(0.0, 0.0, 1.0 / self.zoom));
 
-            let view = Mat4::look_at_rh(eye, Vec3::ZERO, Vec3::Y);
+            let view = Mat4::look_at_rh(eye, self.camera_pos, Vec3::Y);
             let model = Mat4::from_rotation_y(self.angle_y);
             let light = Vec3::new(1.0, -1.0, 1.0);
 
@@ -103,6 +110,9 @@ impl ModelView {
                             StaticMeshCallback {
                                 view: proj * view * model,
                                 light,
+                                show_cpu_geom: true,
+                                show_bbox: self.show_bbox,
+                                show_origin: self.show_origin,
                             },
                         ));
                     }
@@ -143,33 +153,76 @@ impl ModelView {
                         });
                     });
 
-                ui.monospace(model_data.file_path.file_name().unwrap().to_string_lossy());
-                ui.monospace(format!(
-                    "{} submeshes",
-                    model_data.smesh.mesh.submeshes.len()
-                ));
-                ui.monospace(format!(
-                    "{} materials",
-                    model_data.smesh.matlib.materials.len()
-                ));
-                ui.monospace(format!("zoom: {}", self.zoom));
-                if ui.checkbox(&mut self.spin, "spin").clicked() {
-                    self.last_touch = now - Duration::from_secs(SPIN_ENABLE_DELAY);
-                };
+                Panel::bottom("bottom_infobar")
+                    .frame(Frame::NONE.inner_margin(4.0))
+                    .show_separator_line(false)
+                    .show_inside(ui, |ui| {
+                        ui.monospace(model_data.file_path.file_name().unwrap().to_string_lossy());
+                    });
 
-                if ui
-                    .selectable_value(&mut self.view_mode, ViewMode::SampleText, "sample text")
-                    .clicked()
-                {
-                    self.view_mode = ViewMode::SampleText
-                }
+                Panel::top("top_toolbar")
+                    .frame(Frame::NONE.inner_margin(4.0))
+                    .show_separator_line(false)
+                    .show_inside(ui, |ui| {
+                        OSD_FRAME.show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                if ui
+                                    .selectable_value(
+                                        &mut self.view_mode,
+                                        ViewMode::SampleText,
+                                        "sample text",
+                                    )
+                                    .clicked()
+                                {
+                                    self.view_mode = ViewMode::SampleText
+                                }
 
-                if ui
-                    .selectable_value(&mut self.view_mode, ViewMode::BottomText, "bottom text")
-                    .clicked()
-                {
-                    self.view_mode = ViewMode::BottomText
-                }
+                                if ui
+                                    .selectable_value(
+                                        &mut self.view_mode,
+                                        ViewMode::BottomText,
+                                        "bottom text",
+                                    )
+                                    .clicked()
+                                {
+                                    self.view_mode = ViewMode::BottomText
+                                }
+
+                                ui.separator();
+
+                                if ui
+                                    .add(Button::new("BBOX").selected(self.show_bbox))
+                                    .clicked()
+                                {
+                                    self.show_bbox = !self.show_bbox;
+                                }
+
+                                if ui
+                                    .add(Button::new("ORIGIN").selected(self.show_origin))
+                                    .clicked()
+                                {
+                                    self.show_origin = !self.show_origin;
+                                }
+
+                                if ui.add(Button::new("SPIN").selected(self.spin)).clicked() {
+                                    self.spin = !self.spin;
+                                    self.last_touch = now - Duration::from_secs(SPIN_ENABLE_DELAY);
+                                };
+                            });
+                        });
+                    });
+
+                Frame::NONE.inner_margin(4).show(ui, |ui| {
+                    ui.monospace(format!(
+                        "{} submeshes",
+                        model_data.smesh.mesh.submeshes.len()
+                    ));
+                    ui.monospace(format!(
+                        "{} materials",
+                        model_data.smesh.matlib.materials.len()
+                    ));
+                    ui.monospace(format!("zoom: {}", self.zoom));
+                });
 
                 match self.view_mode {
                     ViewMode::SampleText => {
