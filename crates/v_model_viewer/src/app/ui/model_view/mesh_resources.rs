@@ -124,7 +124,7 @@ impl StaticMeshResource {
             .iter()
             .filter(|s: &&v_types::Submesh| s.cpu.is_some())
             .map(|s| {
-                let cpu_head = s.cpu.as_ref().unwrap();
+                let cpu_data: &v_types::SubmeshData = s.cpu.as_ref().unwrap();
 
                 use wgpu::util::DeviceExt;
                 let vbuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -141,7 +141,7 @@ impl StaticMeshResource {
                 CpuSubmesh {
                     vbuf,
                     ibuf,
-                    surfaces: cpu_head.surfaces.clone(),
+                    surfaces: cpu_data.surfaces.clone(),
                 }
             })
             .collect();
