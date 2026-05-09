@@ -251,6 +251,7 @@ mod tests {
         let samples_path = PathBuf::from("../../samples/meshes_extracted");
 
         let mut num_failed = 0;
+        let mut num_success = 0;
         for entry in std::fs::read_dir(samples_path).unwrap() {
             let entry = entry.unwrap();
             let path = entry.path();
@@ -264,10 +265,13 @@ mod tests {
             if let Err(e) = StaticMesh::from_data(&buf, &mut offset) {
                 num_failed += 1;
                 println!("ERR: {path:?} {offset:#X?} {e}");
+            } else {
+                num_success += 1
             }
         }
         println!("num_failed: {num_failed:?}");
         assert_eq!(num_failed, 0);
+        assert_eq!(num_success, 659);
     }
 
     #[test]
@@ -276,7 +280,6 @@ mod tests {
         let samples_path = PathBuf::from("../../samples/meshes_extracted");
 
         let mut num_failed = 0;
-        let mut num_success = 0;
         for entry in std::fs::read_dir(samples_path).unwrap() {
             let entry = entry.unwrap();
             let path = entry.path();
@@ -297,13 +300,39 @@ mod tests {
                     "Didn't reach end: {path:?} off: {offset:#X?}, end: {:#X?}",
                     buf.len()
                 );
+            }
+        }
+        println!("num_failed: {num_failed:?}");
+        assert_eq!(num_failed, 0);
+    }
+
+    #[test]
+    fn test_parse_every_cmesh() {
+        // Unpacked meshes.vpp_pc
+        let samples_path = PathBuf::from("../../samples/meshes_extracted");
+
+        let mut num_failed = 0;
+        let mut num_success = 0;
+        for entry in std::fs::read_dir(samples_path).unwrap() {
+            let entry = entry.unwrap();
+            let path = entry.path();
+
+            if !entry.metadata().unwrap().is_file() || path.extension().unwrap() != "cmesh_pc" {
+                continue;
+            }
+
+            let buf = std::fs::read(&path).unwrap();
+            let mut offset = 0;
+            if let Err(e) = StaticMesh::from_data(&buf, &mut offset) {
+                num_failed += 1;
+                println!("ERR: {path:?} {offset:#X?} {e}");
             } else {
                 num_success += 1
             }
         }
         println!("num_failed: {num_failed:?}");
         assert_eq!(num_failed, 0);
-        assert_eq!(num_success, 659);
+        assert_eq!(num_success, 3028);
     }
 
     // #[test]
