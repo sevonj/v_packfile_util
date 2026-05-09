@@ -22,6 +22,7 @@ use crate::app::widgets::StaticMeshInspector;
 use crate::app::widgets::StatusPage;
 
 const SPIN_ENABLE_DELAY: u64 = 5;
+const INSPECTOR_W: f32 = 300.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ViewMode {
@@ -67,8 +68,18 @@ impl ModelView {
 
         // paint
         {
+            let view_off_px = -(rect.width() - (rect.width() - INSPECTOR_W)) / 2.0;
+            let view_off_n = view_off_px / (rect.width() / 2.0);
+            let view_off_xf = Mat4::from_translation(Vec3::new(view_off_n, 0.0, 0.0));
+
             let aspect = rect.width() / rect.height();
-            let proj = Mat4::perspective_rh(45_f32.to_radians(), aspect, 0.1, 100.0);
+            let proj = view_off_xf
+                * Mat4::perspective_rh(
+                    45_f32.to_radians(),
+                    aspect,
+                    0.1 / self.zoom,
+                    100.0 / self.zoom,
+                );
 
             let eye = Mat4::from_rotation_x(self.angle_x).transform_vector3(Vec3::new(
                 0.0,
@@ -108,7 +119,7 @@ impl ModelView {
 
                 Panel::right("modelview_inspector")
                     .frame(OSD_PANEL_FRAME)
-                    .exact_size(300.0)
+                    .exact_size(INSPECTOR_W)
                     .resizable(false)
                     .show_separator_line(false)
                     .show_inside(ui, |ui| {

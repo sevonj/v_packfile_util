@@ -1,7 +1,7 @@
 fn main() -> eframe::Result {
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1200.0, 900.0])
+            .with_inner_size([1600.0, 900.0])
             .with_min_inner_size([400.0, 300.0]),
         depth_buffer: 32,
         renderer: eframe::Renderer::Wgpu,
