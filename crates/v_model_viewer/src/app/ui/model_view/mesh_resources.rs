@@ -9,11 +9,15 @@ use glam::Vec3;
 use wgpu::PipelineCompilationOptions;
 
 const CPU_SHADER: &str = include_str!("shad.wgsl");
-const CPU_V_LAYOUT: wgpu::VertexBufferLayout<'static> = wgpu::VertexBufferLayout {
-    array_stride: 12 as wgpu::BufferAddress,
-    step_mode: wgpu::VertexStepMode::Vertex,
-    attributes: &wgpu::vertex_attr_array![0 => Float32x3],
-};
+const fn cpu_vbuf_layout(
+    vertex_header: &v_types::VertexBufferHeader,
+) -> wgpu::VertexBufferLayout<'_> {
+    wgpu::VertexBufferLayout {
+        array_stride: vertex_header.stride as wgpu::BufferAddress,
+        step_mode: wgpu::VertexStepMode::Vertex,
+        attributes: &wgpu::vertex_attr_array![0 => Float32x3],
+    }
+}
 
 #[repr(C)]
 #[derive(Copy, Clone, Pod, Zeroable)]
@@ -24,13 +28,14 @@ struct Uniforms {
 }
 
 struct CpuSubmesh {
-    vbuf: wgpu::Buffer,
+    vbufs: Vec<wgpu::Buffer>,
     ibuf: wgpu::Buffer,
     surfaces: Vec<v_types::Surface>,
+    base_pipeline_index: usize,
 }
 
 pub struct StaticMeshResource {
-    pipeline: wgpu::RenderPipeline,
+    pipelines: Vec<wgpu::RenderPipeline>,
     uniform_buf: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
     submeshes: Vec<CpuSubmesh>,
@@ -81,43 +86,51 @@ impl StaticMeshResource {
             immediate_size: 0,
         });
 
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("static_mesh_cpu_pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_main"),
-                compilation_options: PipelineCompilationOptions::default(),
-                buffers: &[CPU_V_LAYOUT],
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs_main"),
-                compilation_options: PipelineCompilationOptions::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: render_state.target_format,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleStrip,
-                strip_index_format: Some(wgpu::IndexFormat::Uint16),
-                cull_mode: Some(wgpu::Face::Back),
-                ..Default::default()
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: Some(true),
-                depth_compare: Some(wgpu::CompareFunction::Less),
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
-            }),
-            multisample: wgpu::MultisampleState::default(),
-            multiview_mask: None,
-            cache: None,
-        });
+        let mut pipelines = vec![];
+        for s in smesh.mesh.submeshes.iter().filter(|s| s.cpu.is_some()) {
+            let cpu_data = s.cpu.as_ref().unwrap();
+            for vertex_header in &cpu_data.vertex_headers {
+                let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some("static_mesh_cpu_pipeline"),
+                    layout: Some(&pipeline_layout),
+                    vertex: wgpu::VertexState {
+                        module: &shader,
+                        entry_point: Some("vs_main"),
+                        compilation_options: PipelineCompilationOptions::default(),
+                        buffers: &[cpu_vbuf_layout(vertex_header)],
+                    },
+                    fragment: Some(wgpu::FragmentState {
+                        module: &shader,
+                        entry_point: Some("fs_main"),
+                        compilation_options: PipelineCompilationOptions::default(),
+                        targets: &[Some(wgpu::ColorTargetState {
+                            format: render_state.target_format,
+                            blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                            write_mask: wgpu::ColorWrites::ALL,
+                        })],
+                    }),
+                    primitive: wgpu::PrimitiveState {
+                        topology: wgpu::PrimitiveTopology::TriangleStrip,
+                        strip_index_format: Some(wgpu::IndexFormat::Uint16),
+                        cull_mode: Some(wgpu::Face::Back),
+                        ..Default::default()
+                    },
+                    depth_stencil: Some(wgpu::DepthStencilState {
+                        format: wgpu::TextureFormat::Depth32Float,
+                        depth_write_enabled: Some(true),
+                        depth_compare: Some(wgpu::CompareFunction::Less),
+                        stencil: wgpu::StencilState::default(),
+                        bias: wgpu::DepthBiasState::default(),
+                    }),
+                    multisample: wgpu::MultisampleState::default(),
+                    multiview_mask: None,
+                    cache: None,
+                });
+                pipelines.push(pipeline);
+            }
+        }
 
+        let mut base_pipeline_index = 0;
         let submeshes = smesh
             .mesh
             .submeshes
@@ -127,27 +140,42 @@ impl StaticMeshResource {
                 let cpu_data: &v_types::SubmeshData = s.cpu.as_ref().unwrap();
 
                 use wgpu::util::DeviceExt;
-                let vbuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("cpu_vbuf"),
-                    contents: &s.cpu_vdata,
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
+
+                let mut offset = 0usize;
+                let vbufs = cpu_data
+                    .vertex_headers
+                    .iter()
+                    .map(|h| {
+                        let byte_len = h.num_vertices as usize * h.stride as usize;
+                        let slice = &s.cpu_vdata[offset..offset + byte_len];
+                        offset += byte_len;
+                        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                            label: Some("cpu_vbuf"),
+                            contents: slice,
+                            usage: wgpu::BufferUsages::VERTEX,
+                        })
+                    })
+                    .collect();
+
                 let ibuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("cpu_ibuf"),
                     contents: &s.cpu_idata,
                     usage: wgpu::BufferUsages::INDEX,
                 });
 
-                CpuSubmesh {
-                    vbuf,
+                let sub = CpuSubmesh {
+                    vbufs,
                     ibuf,
                     surfaces: cpu_data.surfaces.clone(),
-                }
+                    base_pipeline_index,
+                };
+                base_pipeline_index += cpu_data.vertex_headers.len();
+                sub
             })
             .collect();
 
         Self {
-            pipeline,
+            pipelines,
             uniform_buf,
             bind_group,
             submeshes,
@@ -200,14 +228,15 @@ impl CallbackTrait for StaticMeshCallback {
             return;
         };
 
-        rpass.set_pipeline(&res.pipeline);
         rpass.set_bind_group(0, &res.bind_group, &[]);
 
         for sub in &res.submeshes {
-            rpass.set_vertex_buffer(0, sub.vbuf.slice(..));
             rpass.set_index_buffer(sub.ibuf.slice(..), wgpu::IndexFormat::Uint16);
 
             for surf in &sub.surfaces {
+                let vbuf = &sub.vbufs[surf.vbuf as usize];
+                rpass.set_pipeline(&res.pipelines[sub.base_pipeline_index + surf.vbuf as usize]);
+                rpass.set_vertex_buffer(0, vbuf.slice(..));
                 let indices = surf.start_index..(surf.start_index + surf.num_indices as u32);
                 let base_vertex = surf.start_vertex as i32;
                 rpass.draw_indexed(indices, base_vertex, 0..1);
