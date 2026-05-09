@@ -184,7 +184,7 @@ impl StaticMeshResource {
 
     pub fn update_uniforms(&self, queue: &wgpu::Queue, cb: &StaticMeshCallback) {
         let view = cb.view.to_cols_array_2d();
-        let light = cb.view.transform_vector3(cb.light).to_array();
+        let light = cb.view.inverse().transform_vector3(cb.light).to_array();
 
         queue.write_buffer(
             &self.uniform_buf,
