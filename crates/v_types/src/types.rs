@@ -25,5 +25,5 @@ pub use packfile::PackfileEntry;
 pub use quaternion::Quaternion;
 pub use static_mesh::StaticMesh;
 pub use static_mesh::StaticMeshHeader;
-pub use static_mesh::StaticMeshNavPoint;
+pub use static_mesh::StaticMeshNavpoint;
 pub use vector::Vector;

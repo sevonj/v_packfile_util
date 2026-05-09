@@ -4,6 +4,8 @@ use std::time::Duration;
 use std::time::Instant;
 
 use eframe::egui_wgpu::RenderState;
+use egui::Panel;
+use egui::ScrollArea;
 use egui::Sense;
 use egui::Ui;
 use egui::UiBuilder;
@@ -15,6 +17,8 @@ use mesh_resources::StaticMeshResource;
 use v_types::StaticMesh;
 
 use crate::app::ModelData;
+use crate::app::style::OSD_PANEL_FRAME;
+use crate::app::widgets::StaticMeshInspector;
 use crate::app::widgets::StatusPage;
 
 const SPIN_ENABLE_DELAY: u64 = 5;
@@ -101,6 +105,28 @@ impl ModelView {
             .scope_builder(ui_builder, |ui| {
                 ui.set_width(ui.available_width());
                 ui.set_height(ui.available_height());
+
+                Panel::right("modelview_inspector")
+                    .frame(OSD_PANEL_FRAME)
+                    .exact_size(300.0)
+                    .resizable(false)
+                    .show_separator_line(false)
+                    .show_inside(ui, |ui| {
+                        // This scope exists to eat input events that would otherwise go to the parent scope
+                        ui.scope_builder(UiBuilder::new().sense(Sense::click_and_drag()), |ui| {
+                            ui.label("Inspector");
+                            let panel_h = ui.available_height();
+
+                            ScrollArea::vertical().show(ui, |ui| {
+                                ui.set_width(ui.available_width());
+                                ui.set_height(ui.available_height());
+                                ui.add(StaticMeshInspector::new(&model_data.smesh));
+
+                                // More comfortable scrolling
+                                ui.add_space(panel_h - 32.0);
+                            });
+                        });
+                    });
 
                 ui.monospace(model_data.file_path.file_name().unwrap().to_string_lossy());
                 ui.monospace(format!(

@@ -16,7 +16,7 @@ pub struct StaticMesh {
     /// Probably. At least matches texture count.
     pub texture_flags: Vec<i32>,
     pub texture_names: Vec<String>,
-    pub navpoints: Vec<StaticMeshNavPoint>,
+    pub navpoints: Vec<StaticMeshNavpoint>,
     /// Maybe.
     pub bone_indices: Vec<i32>,
     pub matlib: Matlib,
@@ -53,8 +53,8 @@ impl StaticMesh {
         if num_navpoints > 0 {
             align(data_offset, 16);
             for _ in 0..num_navpoints {
-                navpoints.push(StaticMeshNavPoint::from_data(&buf[*data_offset..])?);
-                *data_offset += size_of::<StaticMeshNavPoint>();
+                navpoints.push(StaticMeshNavpoint::from_data(&buf[*data_offset..])?);
+                *data_offset += size_of::<StaticMeshNavpoint>();
             }
         }
 
@@ -209,7 +209,7 @@ impl StaticMeshHeader {
 /// Used for IK?
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
-pub struct StaticMeshNavPoint {
+pub struct StaticMeshNavpoint {
     /// name to reference nav point by
     pub name: [u8; Self::MAX_NAME_LENGTH],
     /// vid this navp is attached to.
@@ -220,7 +220,7 @@ pub struct StaticMeshNavPoint {
     pub orient: Quaternion,
 }
 
-impl StaticMeshNavPoint {
+impl StaticMeshNavpoint {
     pub const MAX_NAME_LENGTH: usize = 64;
 
     pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
@@ -231,6 +231,10 @@ impl StaticMeshNavPoint {
             pos: Vector::from_data(&buf[Self::MAX_NAME_LENGTH + 4..])?,
             orient: Quaternion::from_data(&buf[Self::MAX_NAME_LENGTH + 16..])?,
         })
+    }
+
+    pub fn name(&self) -> Result<&str, VolitionError> {
+        read_cstr(&self.name, 0)
     }
 }
 

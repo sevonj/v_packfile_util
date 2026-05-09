@@ -1,4 +1,5 @@
 mod data;
+mod style;
 mod ui;
 mod widgets;
 
@@ -141,7 +142,7 @@ impl App for VModelViewer {
 
         let fill = Color32::from_hex("#3F3F3F").unwrap();
         CentralPanel::default()
-            .frame(Frame::central_panel(ui.style()).fill(fill))
+            .frame(Frame::NONE.fill(fill))
             .show_inside(ui, |ui| match self.state.tab {
                 AppTab::View => {
                     if let Some(model_data) = &self.model_data {
@@ -149,6 +150,9 @@ impl App for VModelViewer {
                             && let Some(render_state) = frame.wgpu_render_state()
                         {
                             self.model_view = Some(ModelView::new(render_state, &model_data.smesh));
+
+                            // Clear state on model change. Otherwise old collapsingheader states, etc. will affect the new ui
+                            ui.data_mut(|w| w.clear());
                         }
                         if let Some(model_view) = self.model_view.as_mut() {
                             model_view.ui(ui, model_data);

@@ -508,12 +508,12 @@ impl VertexBufferHeader {
     pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
 
-        let unk_08 = read_i32_le(buf, 0x8);
-        if unk_08 != -1 {
+        let ptr_render_data = read_i32_le(buf, 0x8);
+        if ptr_render_data != -1 {
             return Err(VolitionError::ExpectedExactValue {
-                field: "VertexBuffer::unk_08",
+                field: "VertexBuffer::ptr_render_data",
                 expected: -1,
-                got: unk_08,
+                got: ptr_render_data,
             });
         }
 
@@ -522,7 +522,7 @@ impl VertexBufferHeader {
             num_uvs: buf[1],
             stride: read_u16_le(buf, 0x2),
             num_vertices: read_u32_le(buf, 0x4),
-            ptr_render_data: unk_08,
+            ptr_render_data,
             unk_0c: read_i32_le(buf, 0xc),
         })
     }
