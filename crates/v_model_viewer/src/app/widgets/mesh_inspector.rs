@@ -335,7 +335,7 @@ fn vbufs_ui(ui: &mut egui::Ui, vbufs: &[VertexBufferHeader]) {
         .column(Column::remainder());
 
     table_builder.body(|body| {
-        body.rows(ROW_H * 6.0, num_vbufs, |mut row| {
+        body.rows(ROW_H * 4.0, num_vbufs, |mut row| {
             let vbuf = &vbufs[row.index()];
 
             row.col(|ui| {
@@ -353,9 +353,6 @@ fn vbufs_ui(ui: &mut egui::Ui, vbufs: &[VertexBufferHeader]) {
                     });
                     ui.horizontal(|ui| {
                         ui.label(format!("Vertices: {}", vbuf.num_vertices));
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label(format!("unk_0c: {}", vbuf.unk_0c));
                     });
                 });
             });
