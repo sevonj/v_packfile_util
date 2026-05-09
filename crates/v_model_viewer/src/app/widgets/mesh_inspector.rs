@@ -343,7 +343,7 @@ fn vbufs_ui(ui: &mut egui::Ui, vbufs: &[VertexBufferHeader]) {
 
                 ui.vertical(|ui| {
                     ui.horizontal(|ui| {
-                        ui.label(format!("Vertex Format: {}", vbuf.vertex_format));
+                        ui.label(format!("Vertex Format: {}", vbuf.format));
                     });
                     ui.horizontal(|ui| {
                         ui.label(format!("UV Channels: {}", vbuf.num_uvs));

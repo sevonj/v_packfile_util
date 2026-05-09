@@ -122,9 +122,41 @@ impl Mesh {
                     });
                 }
 
+                if index_header.num_vertex_buffers != 1 {
+                    return Err(VolitionError::ExpectedExactValue {
+                        field: "IndexBufferHeader::num_vertex_buffers (cpu)",
+                        expected: 1,
+                        got: index_header.num_vertex_buffers as i32,
+                    });
+                }
+
                 let mut vertex_headers = Vec::with_capacity(num_vertex_buffers);
                 for _ in 0..index_header.num_vertex_buffers {
-                    vertex_headers.push(VertexBufferHeader::from_data(&buf[*data_offset..])?);
+                    let vertex_header = VertexBufferHeader::from_data(&buf[*data_offset..])?;
+
+                    if vertex_header.format != 0 {
+                        return Err(VolitionError::ExpectedExactValue {
+                            field: "VertexBufferHeader::format (cpu)",
+                            expected: 0,
+                            got: vertex_header.format as i32,
+                        });
+                    }
+                    if vertex_header.num_uvs != 0 {
+                        return Err(VolitionError::ExpectedExactValue {
+                            field: "VertexBufferHeader::num_uvs (cpu)",
+                            expected: 0,
+                            got: vertex_header.num_uvs as i32,
+                        });
+                    }
+                    if vertex_header.stride != 12 {
+                        return Err(VolitionError::ExpectedExactValue {
+                            field: "VertexBufferHeader::stride (cpu)",
+                            expected: 12,
+                            got: vertex_header.stride as i32,
+                        });
+                    }
+
+                    vertex_headers.push(vertex_header);
                     *data_offset += size_of::<VertexBufferHeader>();
                 }
 
@@ -286,6 +318,15 @@ impl MeshHeader {
             };
             let c = if let Some(header) = chead {
                 let surfaces = header.read_surfaces(buf, data_offset)?;
+                for surf in &surfaces {
+                    if surf.vbuf != 0 {
+                        return Err(VolitionError::ExpectedExactValue {
+                            field: "Surface::vbuf (cpu)",
+                            expected: 0,
+                            got: surf.vbuf as i32,
+                        });
+                    }
+                }
                 Some((header, surfaces))
             } else {
                 None
@@ -325,6 +366,7 @@ impl MeshHeader {
         if self.has_cpu_submeshes() {
             for _ in 0..num_submeshes {
                 let sm = SurfaceHeader::from_data(&buf[*data_offset..])?;
+
                 *data_offset += size_of::<SurfaceHeader>();
                 cpu_headers.push(sm);
             }
@@ -340,6 +382,7 @@ impl MeshHeader {
 
         for header in cpu_headers {
             let surfaces = header.read_surfaces(buf, data_offset)?;
+
             cpu_submeshes.push((header, surfaces));
         }
 
@@ -354,7 +397,9 @@ pub struct Submesh {
     pub gpu: Option<SubmeshData>,
     /// Headers for geometry that lives in CPU RAM
     /// Purpose unknown, sometimes not present
-    /// No materials or attributes; it always has exactly one vertex buffer
+    /// No materials or attributes;
+    /// Always has exactly one vertex buffer?
+    /// If exists, number of surfaces matches gpu data
     pub cpu: Option<SubmeshData>,
     /// CPU vertex buffer in raw bytes. Empty if `cpu` == `None`
     /// Format is always 3xf32 coords only
@@ -426,11 +471,11 @@ impl SurfaceHeader {
 #[repr(C)]
 pub struct Surface {
     /// Which vertex buffer to use
-    pub vbuf: i32,
+    pub vbuf: u32,
     /// First index
-    pub start_index: i32,
+    pub start_index: u32,
     /// First vertex
-    pub start_vertex: i32,
+    pub start_vertex: u32,
     pub num_indices: u16,
     pub material: i16,
 }
@@ -439,9 +484,9 @@ impl Surface {
     pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
         Ok(Self {
-            vbuf: read_i32_le(buf, 0x0),
-            start_index: read_i32_le(buf, 0x4),
-            start_vertex: read_i32_le(buf, 0x8),
+            vbuf: read_u32_le(buf, 0x0),
+            start_index: read_u32_le(buf, 0x4),
+            start_vertex: read_u32_le(buf, 0x8),
             num_indices: read_u16_le(buf, 0xc),
             material: read_i16_le(buf, 0xe),
         })
@@ -454,8 +499,11 @@ pub struct IndexBufferHeader {
     pub mesh_type: i16,
     pub num_vertex_buffers: u16,
     pub num_indices: u32,
+    /// Always -1
     pub runtime_08: i32,
+    /// Always -1
     pub runtime_0c: i32,
+    /// Always 0
     pub runtime_10: u32,
 }
 
@@ -481,13 +529,22 @@ impl IndexBufferHeader {
             });
         }
 
+        let runtime_10 = read_u32_le(buf, 0x10);
+        if runtime_10 != 0 {
+            return Err(VolitionError::ExpectedExactValue {
+                field: "MeshData::runtime_10",
+                expected: 0,
+                got: runtime_10 as i32,
+            });
+        }
+
         Ok(Self {
             mesh_type: read_i16_le(buf, 0x0),
             num_vertex_buffers: read_u16_le(buf, 0x2),
             num_indices: read_u32_le(buf, 0x4),
             runtime_08,
             runtime_0c,
-            runtime_10: read_u32_le(buf, 0x10),
+            runtime_10,
         })
     }
 }
@@ -496,11 +553,13 @@ impl IndexBufferHeader {
 #[repr(C)]
 pub struct VertexBufferHeader {
     /// Probably
-    pub vertex_format: u8,
+    pub format: u8,
     pub num_uvs: u8,
     pub stride: u16,
     pub num_vertices: u32,
+    /// Always -1
     pub ptr_render_data: i32,
+    /// Always 0
     pub unk_0c: i32,
 }
 
@@ -517,13 +576,22 @@ impl VertexBufferHeader {
             });
         }
 
+        let unk_0c = read_i32_le(buf, 0xc);
+        if unk_0c != 0 {
+            return Err(VolitionError::ExpectedExactValue {
+                field: "VertexBuffer::unk_0c",
+                expected: 0,
+                got: unk_0c,
+            });
+        }
+
         Ok(Self {
-            vertex_format: buf[0],
+            format: buf[0],
             num_uvs: buf[1],
             stride: read_u16_le(buf, 0x2),
             num_vertices: read_u32_le(buf, 0x4),
             ptr_render_data,
-            unk_0c: read_i32_le(buf, 0xc),
+            unk_0c,
         })
     }
 }
