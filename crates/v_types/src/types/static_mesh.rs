@@ -7,7 +7,7 @@ use crate::util::*;
 
 pub const MAX_TEXTURES: u16 = 100;
 pub const MAX_NAVPOINTS: u16 = 100;
-pub const MAX_BONES: u32 = 100;
+pub const MAX_BONES: u32 = 500;
 
 /// Deserialized cmesh/smesh
 #[derive(Debug, Clone)]
