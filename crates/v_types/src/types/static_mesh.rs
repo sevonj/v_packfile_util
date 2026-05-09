@@ -276,6 +276,7 @@ mod tests {
         let samples_path = PathBuf::from("../../samples/meshes_extracted");
 
         let mut num_failed = 0;
+        let mut num_success = 0;
         for entry in std::fs::read_dir(samples_path).unwrap() {
             let entry = entry.unwrap();
             let path = entry.path();
@@ -296,10 +297,13 @@ mod tests {
                     "Didn't reach end: {path:?} off: {offset:#X?}, end: {:#X?}",
                     buf.len()
                 );
+            } else {
+                num_success += 1
             }
         }
         println!("num_failed: {num_failed:?}");
         assert_eq!(num_failed, 0);
+        assert_eq!(num_success, 659);
     }
 
     // #[test]
