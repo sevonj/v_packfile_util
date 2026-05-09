@@ -3,8 +3,8 @@ use crate::util::*;
 
 pub const MAX_MATERIALS: u32 = 200;
 pub const MAX_CONSTANTS: u32 = 10000;
-pub const MAX_UKNOWN3S: u32 = 1000;
-pub const MAX_UKNOWN4S: u16 = 50;
+pub const MAX_UNKNOWN3S: u32 = 2000;
+pub const MAX_UNKNOWN4S: u16 = 50;
 pub const MAX_UKNOWN4_VALUE: usize = 0xffff;
 
 #[derive(Debug, Clone)]
@@ -197,10 +197,10 @@ impl MaterialBlock {
             });
         }
         let num_mat_unknown3 = read_u32_le(buf, 0x1c);
-        if num_mat_unknown3 > MAX_UKNOWN3S {
+        if num_mat_unknown3 > MAX_UNKNOWN3S {
             return Err(VolitionError::ValueTooHigh {
                 field: "MaterialBlock::num_mat_unknown3",
-                max: MAX_UKNOWN3S as usize,
+                max: MAX_UNKNOWN3S as usize,
                 got: num_mat_unknown3 as usize,
             });
         }
@@ -326,10 +326,10 @@ impl MaterialUnknown3 {
         check_fits_buf::<Self>(buf)?;
 
         let num_mat_unk4 = read_u16_le(buf, 0x8);
-        if num_mat_unk4 > MAX_UKNOWN4S {
+        if num_mat_unk4 > MAX_UNKNOWN4S {
             return Err(VolitionError::ValueTooHigh {
                 field: "MaterialBlock::num_mat_unk4",
-                max: MAX_UKNOWN4S as usize,
+                max: MAX_UNKNOWN4S as usize,
                 got: num_mat_unk4 as usize,
             });
         }
