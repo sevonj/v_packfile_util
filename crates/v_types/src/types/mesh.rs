@@ -323,57 +323,6 @@ impl MeshHeader {
 
         Ok(ret)
     }
-
-    /// # Arguments: buf must be sliced to start after Mesh
-    #[allow(clippy::type_complexity)]
-    pub fn read_submeshes_old(
-        &self,
-        buf: &[u8],
-        data_offset: &mut usize,
-    ) -> Result<
-        (
-            Vec<(SurfaceHeader, Vec<Surface>)>,
-            Vec<(SurfaceHeader, Vec<Surface>)>,
-        ),
-        VolitionError,
-    > {
-        let num_submeshes = self.num_submeshes as usize;
-        let mut gpu_headers = Vec::with_capacity(num_submeshes);
-        let mut cpu_headers = Vec::with_capacity(num_submeshes);
-
-        if self.has_gpu_submeshes() {
-            for _ in 0..num_submeshes {
-                let sm = SurfaceHeader::from_data(&buf[*data_offset..])?;
-                *data_offset += size_of::<SurfaceHeader>();
-                gpu_headers.push(sm);
-            }
-        }
-
-        if self.has_cpu_submeshes() {
-            for _ in 0..num_submeshes {
-                let sm = SurfaceHeader::from_data(&buf[*data_offset..])?;
-
-                *data_offset += size_of::<SurfaceHeader>();
-                cpu_headers.push(sm);
-            }
-        }
-
-        let mut gpu_submeshes = Vec::with_capacity(num_submeshes);
-        let mut cpu_submeshes = Vec::with_capacity(num_submeshes);
-
-        for header in gpu_headers {
-            let surfaces = header.read_surfaces(buf, data_offset)?;
-            gpu_submeshes.push((header, surfaces));
-        }
-
-        for header in cpu_headers {
-            let surfaces = header.read_surfaces(buf, data_offset)?;
-
-            cpu_submeshes.push((header, surfaces));
-        }
-
-        Ok((gpu_submeshes, cpu_submeshes))
-    }
 }
 
 #[derive(Debug, Clone)]
