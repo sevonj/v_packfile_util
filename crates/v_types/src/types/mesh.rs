@@ -134,25 +134,11 @@ impl Mesh {
                 for _ in 0..index_header.num_vertex_buffers {
                     let vertex_header = VertexBufferHeader::from_data(&buf[*data_offset..])?;
 
-                    if vertex_header.format != 0 {
-                        return Err(VolitionError::ExpectedExactValue {
-                            field: "VertexBufferHeader::format (cpu)",
-                            expected: 0,
-                            got: vertex_header.format as i32,
-                        });
-                    }
                     if vertex_header.num_uvs != 0 {
                         return Err(VolitionError::ExpectedExactValue {
                             field: "VertexBufferHeader::num_uvs (cpu)",
                             expected: 0,
                             got: vertex_header.num_uvs as i32,
-                        });
-                    }
-                    if vertex_header.stride != 12 {
-                        return Err(VolitionError::ExpectedExactValue {
-                            field: "VertexBufferHeader::stride (cpu)",
-                            expected: 12,
-                            got: vertex_header.stride as i32,
                         });
                     }
 
