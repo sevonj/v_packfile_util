@@ -26,7 +26,7 @@ struct Uniforms {
 struct CpuSubmesh {
     vbuf: wgpu::Buffer,
     ibuf: wgpu::Buffer,
-    num_indices: u32,
+    surfaces: Vec<v_types::Surface>,
 }
 
 pub struct StaticMeshResource {
@@ -125,6 +125,7 @@ impl StaticMeshResource {
             .filter(|s: &&v_types::Submesh| s.cpu.is_some())
             .map(|s| {
                 let cpu_head = s.cpu.as_ref().unwrap();
+
                 use wgpu::util::DeviceExt;
                 let vbuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("cpu_vbuf"),
@@ -136,11 +137,11 @@ impl StaticMeshResource {
                     contents: &s.cpu_idata,
                     usage: wgpu::BufferUsages::INDEX,
                 });
-                let num_indices = cpu_head.index_header.num_indices;
+
                 CpuSubmesh {
                     vbuf,
                     ibuf,
-                    num_indices,
+                    surfaces: cpu_head.surfaces.clone(),
                 }
             })
             .collect();
@@ -205,7 +206,12 @@ impl CallbackTrait for StaticMeshCallback {
         for sub in &res.submeshes {
             rpass.set_vertex_buffer(0, sub.vbuf.slice(..));
             rpass.set_index_buffer(sub.ibuf.slice(..), wgpu::IndexFormat::Uint16);
-            rpass.draw_indexed(0..sub.num_indices, 0, 0..1);
+
+            for surf in &sub.surfaces {
+                let indices = surf.start_index..(surf.start_index + surf.num_indices as u32);
+                let base_vertex = surf.start_vertex as i32;
+                rpass.draw_indexed(indices, base_vertex, 0..1);
+            }
         }
     }
 }
