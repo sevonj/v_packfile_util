@@ -2,8 +2,8 @@ use crate::VolitionError;
 use crate::util::*;
 
 pub const MAX_MATERIALS: u32 = 200;
-pub const MAX_CONSTANTS: u32 = 1000;
-pub const MAX_UKNOWN3S: u32 = 500;
+pub const MAX_CONSTANTS: u32 = 10000;
+pub const MAX_UKNOWN3S: u32 = 1000;
 pub const MAX_UKNOWN4S: u16 = 50;
 pub const MAX_UKNOWN4_VALUE: usize = 0xffff;
 
