@@ -35,6 +35,7 @@ pub struct ModelView {
     angle_y: f32,
     angle_x: f32,
     zoom: f32,
+    camera_pos: Vec3,
     last_instant: Instant,
     last_touch: Instant,
     pub view_mode: ViewMode,
@@ -51,12 +52,18 @@ impl ModelView {
             .insert(resources);
 
         let radius = smesh.header.bounding_center.length() + smesh.header.bounding_radius;
+        let camera_pos = Vec3 {
+            x: smesh.header.bounding_center.x,
+            y: smesh.header.bounding_center.y,
+            z: smesh.header.bounding_center.z,
+        };
 
         Self {
             angle_y: 0.0,
             angle_x: 0.0,
             spin: true,
             zoom: 1.0 / (radius * 4.0),
+            camera_pos,
             last_instant: Instant::now(),
             last_touch: Instant::now() - Duration::from_secs(SPIN_ENABLE_DELAY),
             view_mode: ViewMode::SampleText,
@@ -81,11 +88,8 @@ impl ModelView {
                     100.0 / self.zoom,
                 );
 
-            let eye = Mat4::from_rotation_x(self.angle_x).transform_vector3(Vec3::new(
-                0.0,
-                0.0,
-                1.0 / self.zoom,
-            ));
+            let eye = Mat4::from_rotation_x(self.angle_x)
+                .transform_vector3(self.camera_pos + Vec3::new(0.0, 0.0, 1.0 / self.zoom));
 
             let view = Mat4::look_at_rh(eye, Vec3::ZERO, Vec3::Y);
             let model = Mat4::from_rotation_y(self.angle_y);
