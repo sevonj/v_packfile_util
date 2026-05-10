@@ -47,7 +47,7 @@ enum VertexAttributeTypes {
 #[derive(Debug, Clone)]
 #[repr(C)]
 pub struct MeshHeader {
-    pub aabb: AABB,
+    pub bbox: AABB,
     pub flags: i32,
     pub num_lods: u32,
     pub ptr_gpu: i32,
@@ -85,7 +85,7 @@ impl MeshHeader {
         }
 
         Ok(Self {
-            aabb: AABB::from_data(buf)?,
+            bbox: AABB::from_data(buf)?,
             flags: read_i32_le(buf, 0x18),
             num_lods,
             ptr_gpu,

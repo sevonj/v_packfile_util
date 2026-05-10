@@ -69,7 +69,7 @@ fn header_ui(ui: &mut egui::Ui, header: &MeshHeader) {
                 ui.label("BBox min:");
             });
             row.col(|ui| {
-                ui.add(VectorDisplay::new(header.aabb.min));
+                ui.add(VectorDisplay::new(header.bbox.min));
             });
         });
 
@@ -78,7 +78,7 @@ fn header_ui(ui: &mut egui::Ui, header: &MeshHeader) {
                 ui.label("BBox max:");
             });
             row.col(|ui| {
-                ui.add(VectorDisplay::new(header.aabb.max));
+                ui.add(VectorDisplay::new(header.bbox.max));
             });
         });
 

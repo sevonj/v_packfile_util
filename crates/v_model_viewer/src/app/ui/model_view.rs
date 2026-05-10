@@ -1,4 +1,4 @@
-mod mesh_resources;
+mod resources;
 
 use std::time::Duration;
 use std::time::Instant;
@@ -15,8 +15,8 @@ use egui::UiBuilder;
 use glam::Mat4;
 use glam::Vec3;
 
-use mesh_resources::StaticMeshCallback;
-use mesh_resources::StaticMeshResource;
+use resources::StaticMeshCallback;
+use resources::StaticMeshResource;
 use v_types::StaticMesh;
 
 use crate::app::ModelData;
