@@ -1,8 +1,9 @@
 use crate::Matlib;
+use crate::Mesh;
+use crate::MeshHeader;
 use crate::Quaternion;
 use crate::Vector;
 use crate::VolitionError;
-use crate::types::mesh::Mesh;
 use crate::util::*;
 
 pub const MAX_TEXTURES: u16 = 100;
@@ -20,7 +21,8 @@ pub struct StaticMesh {
     /// Maybe.
     pub bone_indices: Vec<i32>,
     pub matlib: Matlib,
-    pub mesh: Mesh,
+    pub mesh_header: MeshHeader,
+    pub lods: Vec<Mesh>,
 }
 
 impl StaticMesh {
@@ -70,7 +72,10 @@ impl StaticMesh {
         align(data_offset, 4);
         let matlib = Matlib::from_data(buf, data_offset)?;
 
-        let mesh = Mesh::from_data(buf, data_offset, header.unk_2c)?;
+        let mesh_header = MeshHeader::from_data(&buf[*data_offset..])?;
+        *data_offset += size_of::<MeshHeader>();
+
+        let lods = mesh_header.read_data(buf, data_offset, header.unk_2c)?;
 
         Ok(Self {
             header,
@@ -79,7 +84,8 @@ impl StaticMesh {
             navpoints,
             bone_indices,
             matlib,
-            mesh,
+            mesh_header,
+            lods,
         })
     }
 
@@ -87,7 +93,7 @@ impl StaticMesh {
         let mut out = String::new();
 
         let mut next_index = 1;
-        for (i, submesh) in self.mesh.submeshes.iter().enumerate() {
+        for (i, submesh) in self.lods.iter().enumerate() {
             let Some(cpu_submesh) = &submesh.cpu else {
                 continue;
             };

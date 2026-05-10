@@ -36,11 +36,7 @@ impl Widget for StaticMeshInspector<'_> {
             let has_navpoints = smesh.header.num_navpoints > 0;
             let has_bones = smesh.header.num_bones > 0;
 
-            CollapsingHeader::new("Header")
-                .default_open(true)
-                .show(ui, |ui| {
-                    header_ui(ui, &smesh.header);
-                });
+            header_ui(ui, &smesh.header);
 
             ui.add_space(SPACE);
 
@@ -80,7 +76,7 @@ impl Widget for StaticMeshInspector<'_> {
 
             ui.add_space(SPACE);
 
-            CollapsingHeader::new("Mesh").show(ui, |ui| ui.add(MeshInspector::new(&smesh.mesh)));
+            ui.add(MeshInspector::new(smesh))
         })
         .response
     }
@@ -208,7 +204,7 @@ fn textures_ui(ui: &mut egui::Ui, texture_flags: &[i32], texture_names: &[String
         .header(ROW_H, |mut row| {
             row.col(|_| {});
             row.col(|ui| {
-                ui.weak("Flags");
+                ui.weak("???");
             });
             row.col(|ui| {
                 ui.weak("Name");

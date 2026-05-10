@@ -62,7 +62,7 @@ impl VModelViewer {
             let has_cpu_geom = self
                 .model_data
                 .as_ref()
-                .is_some_and(|model_data| model_data.smesh.mesh.has_cpu_geometry());
+                .is_some_and(|model_data| model_data.smesh.mesh_header.has_cpu_geometry());
             if ui
                 .add_enabled(has_cpu_geom, Button::new("Dump CPU Geometry"))
                 .clicked()

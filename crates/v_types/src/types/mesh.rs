@@ -45,21 +45,69 @@ enum VertexAttributeTypes {
 }
 
 #[derive(Debug, Clone)]
-pub struct Mesh {
-    pub header: MeshHeader,
-    pub submeshes: Vec<Submesh>,
+#[repr(C)]
+pub struct MeshHeader {
+    pub aabb: AABB,
+    pub flags: i32,
+    pub num_lods: u32,
+    pub ptr_gpu: i32,
+    pub ptr_cpu: i32,
 }
 
-impl Mesh {
-    pub fn from_data(
+impl MeshHeader {
+    pub const MAX_LODS: u32 = 100;
+
+    pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
+        check_fits_buf::<Self>(buf)?;
+        let num_lods = read_u32_le(buf, 0x1c);
+        if num_lods > Self::MAX_LODS {
+            return Err(VolitionError::ValueTooHigh {
+                field: "MeshHeader::num_lods",
+                max: Self::MAX_LODS as usize,
+                got: num_lods as usize,
+            });
+        }
+
+        let ptr_gpu = read_i32_le(buf, 0x20);
+        if ![0, -1].contains(&ptr_gpu) {
+            return Err(VolitionError::UnexpectedValue {
+                desc: "MeshHeader::ptr_gpu should be either -1 or 0",
+                got: ptr_gpu,
+            });
+        }
+
+        let ptr_cpu = read_i32_le(buf, 0x24);
+        if ![0, -1].contains(&ptr_cpu) {
+            return Err(VolitionError::UnexpectedValue {
+                desc: "MeshHeader::ptr_cpu should be either -1 or 0",
+                got: ptr_cpu,
+            });
+        }
+
+        Ok(Self {
+            aabb: AABB::from_data(buf)?,
+            flags: read_i32_le(buf, 0x18),
+            num_lods,
+            ptr_gpu,
+            ptr_cpu,
+        })
+    }
+
+    pub const fn has_gpu_geometry(&self) -> bool {
+        self.ptr_gpu == -1
+    }
+
+    pub const fn has_cpu_geometry(&self) -> bool {
+        self.ptr_cpu == -1
+    }
+
+    pub(crate) fn read_data(
+        &self,
         buf: &[u8],
         data_offset: &mut usize,
         unk_2c: i32,
-    ) -> Result<Self, VolitionError> {
-        let header = MeshHeader::from_data(&buf[*data_offset..])?;
-        *data_offset += size_of::<MeshHeader>();
-
-        let num_submeshes = header.num_submeshes as usize;
+    ) -> Result<Vec<Mesh>, VolitionError> {
+        let num_lods = self.num_lods as usize;
 
         if unk_2c != 0 {
             *data_offset += 20;
@@ -67,13 +115,73 @@ impl Mesh {
 
         align(data_offset, 16);
 
-        let mut submeshes = Vec::with_capacity(num_submeshes);
-        for (gdata, cdata) in header.read_submeshes(buf, data_offset)? {
+        let mut submeshes: Vec<Mesh> = Vec::with_capacity(num_lods);
+
+        let num_lods = self.num_lods as usize;
+
+        let gpu_headers = if self.has_gpu_geometry() {
+            let mut headers = Vec::with_capacity(num_lods);
+            for _ in 0..num_lods {
+                headers.push(Some(SubmeshHeader::from_data(&buf[*data_offset..])?));
+                *data_offset += size_of::<SubmeshHeader>();
+            }
+            headers
+        } else {
+            vec![None; num_lods]
+        };
+
+        let cpu_headers = if self.has_cpu_geometry() {
+            let mut headers = Vec::with_capacity(num_lods);
+            for _ in 0..num_lods {
+                headers.push(Some(SubmeshHeader::from_data(&buf[*data_offset..])?));
+                *data_offset += size_of::<SubmeshHeader>();
+            }
+            headers
+        } else {
+            vec![None; num_lods]
+        };
+
+        assert_eq!(gpu_headers.len(), num_lods);
+        assert_eq!(cpu_headers.len(), num_lods);
+
+        #[allow(clippy::type_complexity)]
+        let mut ret: Vec<(
+            Option<(SubmeshHeader, Vec<Surface>)>,
+            Option<(SubmeshHeader, Vec<Surface>)>,
+        )> = Vec::with_capacity(num_lods);
+
+        for (ghead, chead) in gpu_headers.into_iter().zip(cpu_headers) {
+            let g = if let Some(header) = ghead {
+                let surfaces = header.read_surfaces(buf, data_offset)?;
+                Some((header, surfaces))
+            } else {
+                None
+            };
+            let c = if let Some(header) = chead {
+                let surfaces = header.read_surfaces(buf, data_offset)?;
+                for surf in &surfaces {
+                    if surf.vbuf != 0 {
+                        return Err(VolitionError::ExpectedExactValue {
+                            field: "Surface::vbuf (cpu)",
+                            expected: 0,
+                            got: surf.vbuf as i32,
+                        });
+                    }
+                }
+                Some((header, surfaces))
+            } else {
+                None
+            };
+
+            ret.push((g, c));
+        }
+
+        for (gdata, cdata) in ret {
             let gpu = if let Some((surface_header, surfaces)) = gdata {
                 align(data_offset, 4);
-                let index_header = IndexBufferHeader::from_data(&buf[*data_offset..])?;
+                let index_header = IndexBuffer::from_data(&buf[*data_offset..])?;
                 let num_vertex_buffers = index_header.num_vertex_buffers as usize;
-                *data_offset += size_of::<IndexBufferHeader>();
+                *data_offset += size_of::<IndexBuffer>();
 
                 if index_header.mesh_type != 0 {
                     return Err(VolitionError::ExpectedExactValue {
@@ -85,11 +193,11 @@ impl Mesh {
 
                 let mut vertex_headers = Vec::with_capacity(num_vertex_buffers);
                 for _ in 0..index_header.num_vertex_buffers {
-                    vertex_headers.push(VertexBufferHeader::from_data(&buf[*data_offset..])?);
-                    *data_offset += size_of::<VertexBufferHeader>();
+                    vertex_headers.push(VertexBuffer::from_data(&buf[*data_offset..])?);
+                    *data_offset += size_of::<VertexBuffer>();
                 }
 
-                Some(SubmeshData {
+                Some(Submesh {
                     surface_header,
                     surfaces,
                     index_header,
@@ -101,7 +209,7 @@ impl Mesh {
 
             let cpu = if let Some((surface_header, surfaces)) = cdata {
                 align(data_offset, 4);
-                let index_header = IndexBufferHeader::from_data(&buf[*data_offset..])?;
+                let index_header = IndexBuffer::from_data(&buf[*data_offset..])?;
 
                 let num_vertex_buffers = index_header.num_vertex_buffers as usize;
                 if num_vertex_buffers != 1 {
@@ -112,7 +220,7 @@ impl Mesh {
                     });
                 }
 
-                *data_offset += size_of::<IndexBufferHeader>();
+                *data_offset += size_of::<IndexBuffer>();
 
                 if index_header.mesh_type != 7 {
                     return Err(VolitionError::ExpectedExactValue {
@@ -132,7 +240,7 @@ impl Mesh {
 
                 let mut vertex_headers = Vec::with_capacity(num_vertex_buffers);
                 for _ in 0..index_header.num_vertex_buffers {
-                    let vertex_header = VertexBufferHeader::from_data(&buf[*data_offset..])?;
+                    let vertex_header = VertexBuffer::from_data(&buf[*data_offset..])?;
 
                     if vertex_header.num_uvs != 0 {
                         return Err(VolitionError::ExpectedExactValue {
@@ -143,10 +251,10 @@ impl Mesh {
                     }
 
                     vertex_headers.push(vertex_header);
-                    *data_offset += size_of::<VertexBufferHeader>();
+                    *data_offset += size_of::<VertexBuffer>();
                 }
 
-                Some(SubmeshData {
+                Some(Submesh {
                     surface_header,
                     surfaces,
                     index_header,
@@ -177,165 +285,28 @@ impl Mesh {
                 (vec![], vec![])
             };
 
-            submeshes.push(Submesh {
+            submeshes.push(Mesh {
                 gpu,
                 cpu,
                 cpu_vdata,
                 cpu_idata,
             });
         }
-
-        Ok(Self { header, submeshes })
-    }
-
-    pub const fn has_cpu_geometry(&self) -> bool {
-        self.header.has_cpu_submeshes()
+        Ok(submeshes)
     }
 }
 
 #[derive(Debug, Clone)]
-#[repr(C)]
-pub struct MeshHeader {
-    pub aabb: AABB,
-    pub unk_18: i32,
-    pub num_submeshes: u16,
-    pub unk_1e: i16,
-    pub ptr_gpu: i32,
-    pub ptr_cpu: i32,
-}
-
-impl MeshHeader {
-    pub const MAX_SUBMESHES: u16 = 100;
-
-    pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
-        check_fits_buf::<Self>(buf)?;
-        let num_submeshes = read_u16_le(buf, 0x1c);
-        if num_submeshes > Self::MAX_SUBMESHES {
-            return Err(VolitionError::ValueTooHigh {
-                field: "MeshHeader::num_submeshes",
-                max: Self::MAX_SUBMESHES as usize,
-                got: num_submeshes as usize,
-            });
-        }
-
-        let ptr_gpu = read_i32_le(buf, 0x20);
-        if ![0, -1].contains(&ptr_gpu) {
-            return Err(VolitionError::UnexpectedValue {
-                desc: "MeshData::ptr_gpu_submesh should be either -1 or 0",
-                got: ptr_gpu,
-            });
-        }
-
-        let ptr_cpu = read_i32_le(buf, 0x24);
-        if ![0, -1].contains(&ptr_cpu) {
-            return Err(VolitionError::UnexpectedValue {
-                desc: "MeshData::ptr_cpu_submesh should be either -1 or 0",
-                got: ptr_cpu,
-            });
-        }
-
-        Ok(Self {
-            aabb: AABB::from_data(buf)?,
-            unk_18: read_i32_le(buf, 0x18),
-            num_submeshes,
-            unk_1e: read_i16_le(buf, 0x1e),
-            ptr_gpu,
-            ptr_cpu,
-        })
-    }
-
-    pub const fn has_gpu_submeshes(&self) -> bool {
-        self.ptr_gpu == -1
-    }
-
-    pub const fn has_cpu_submeshes(&self) -> bool {
-        self.ptr_cpu == -1
-    }
-
-    #[allow(clippy::type_complexity)]
-    pub fn read_submeshes(
-        &self,
-        buf: &[u8],
-        data_offset: &mut usize,
-    ) -> Result<
-        Vec<(
-            Option<(SurfaceHeader, Vec<Surface>)>,
-            Option<(SurfaceHeader, Vec<Surface>)>,
-        )>,
-        VolitionError,
-    > {
-        let num_submeshes = self.num_submeshes as usize;
-
-        let gpu_headers = if self.has_gpu_submeshes() {
-            let mut headers = Vec::with_capacity(num_submeshes);
-            for _ in 0..num_submeshes {
-                headers.push(Some(SurfaceHeader::from_data(&buf[*data_offset..])?));
-                *data_offset += size_of::<SurfaceHeader>();
-            }
-            headers
-        } else {
-            vec![None; num_submeshes]
-        };
-
-        let cpu_headers = if self.has_cpu_submeshes() {
-            let mut headers = Vec::with_capacity(num_submeshes);
-            for _ in 0..num_submeshes {
-                headers.push(Some(SurfaceHeader::from_data(&buf[*data_offset..])?));
-                *data_offset += size_of::<SurfaceHeader>();
-            }
-            headers
-        } else {
-            vec![None; num_submeshes]
-        };
-
-        assert_eq!(gpu_headers.len(), num_submeshes);
-        assert_eq!(cpu_headers.len(), num_submeshes);
-
-        let mut ret: Vec<(
-            Option<(SurfaceHeader, Vec<Surface>)>,
-            Option<(SurfaceHeader, Vec<Surface>)>,
-        )> = Vec::with_capacity(num_submeshes);
-        for (ghead, chead) in gpu_headers.into_iter().zip(cpu_headers) {
-            let g = if let Some(header) = ghead {
-                let surfaces = header.read_surfaces(buf, data_offset)?;
-                Some((header, surfaces))
-            } else {
-                None
-            };
-            let c = if let Some(header) = chead {
-                let surfaces = header.read_surfaces(buf, data_offset)?;
-                for surf in &surfaces {
-                    if surf.vbuf != 0 {
-                        return Err(VolitionError::ExpectedExactValue {
-                            field: "Surface::vbuf (cpu)",
-                            expected: 0,
-                            got: surf.vbuf as i32,
-                        });
-                    }
-                }
-                Some((header, surfaces))
-            } else {
-                None
-            };
-
-            ret.push((g, c));
-        }
-
-        Ok(ret)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Submesh {
+pub struct Mesh {
     /// Headers for geometry that lives in VRAM
     /// Not tested, but probably always present
-    pub gpu: Option<SubmeshData>,
+    pub gpu: Option<Submesh>,
     /// Headers for geometry that lives in CPU RAM
     /// Purpose unknown, sometimes not present
     /// No materials or attributes;
     /// Always has exactly one vertex buffer?
     /// If exists, number of surfaces matches gpu data
-    pub cpu: Option<SubmeshData>,
+    pub cpu: Option<Submesh>,
     /// CPU vertex buffer in raw bytes. Empty if `cpu` == `None`
     /// Format is always 3xf32 coords only
     pub cpu_vdata: Vec<u8>,
@@ -345,16 +316,16 @@ pub struct Submesh {
 }
 
 #[derive(Debug, Clone)]
-pub struct SubmeshData {
-    pub surface_header: SurfaceHeader,
+pub struct Submesh {
+    pub surface_header: SubmeshHeader,
     pub surfaces: Vec<Surface>,
-    pub index_header: IndexBufferHeader,
-    pub vertex_headers: Vec<VertexBufferHeader>,
+    pub index_header: IndexBuffer,
+    pub vertex_headers: Vec<VertexBuffer>,
 }
 
 #[derive(Debug, Clone)]
 #[repr(C)]
-pub struct SurfaceHeader {
+pub struct SubmeshHeader {
     pub unk_00: i16,
     pub num_surfaces: u16,
     pub unk_04: i32,
@@ -362,7 +333,7 @@ pub struct SurfaceHeader {
     pub unk_0c: i32,
 }
 
-impl SurfaceHeader {
+impl SubmeshHeader {
     pub const MAX_SURFACES: u16 = 100;
 
     pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
@@ -377,16 +348,42 @@ impl SurfaceHeader {
             });
         }
 
+        let unk_04 = read_i32_le(buf, 0x4);
+        if unk_04 != -1 {
+            return Err(VolitionError::ExpectedExactValue {
+                field: "SubmeshHeader::unk_04",
+                expected: -1,
+                got: unk_04,
+            });
+        }
+
+        let unk_08 = read_i32_le(buf, 0x8);
+        if unk_08 != -1 {
+            return Err(VolitionError::ExpectedExactValue {
+                field: "SubmeshHeader::unk_08",
+                expected: -1,
+                got: unk_08,
+            });
+        }
+
+        let unk_0c = read_i32_le(buf, 0xc);
+        if unk_0c != 0 {
+            return Err(VolitionError::ExpectedExactValue {
+                field: "SubmeshHeader::unk_0c",
+                expected: 0,
+                got: unk_0c,
+            });
+        }
+
         Ok(Self {
             unk_00: read_i16_le(buf, 0x0),
             num_surfaces,
-            unk_04: read_i32_le(buf, 0x4),
-            unk_08: read_i32_le(buf, 0x8),
-            unk_0c: read_i32_le(buf, 0xc),
+            unk_04,
+            unk_08,
+            unk_0c,
         })
     }
 
-    /// # Arguments: buf must be sliced to start immediately after Submeshes
     pub fn read_surfaces(
         &self,
         buf: &[u8],
@@ -430,7 +427,7 @@ impl Surface {
 
 #[derive(Debug, Clone)]
 #[repr(C)]
-pub struct IndexBufferHeader {
+pub struct IndexBuffer {
     pub mesh_type: i16,
     pub num_vertex_buffers: u16,
     pub num_indices: u32,
@@ -442,14 +439,14 @@ pub struct IndexBufferHeader {
     pub runtime_10: u32,
 }
 
-impl IndexBufferHeader {
+impl IndexBuffer {
     pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
 
         let runtime_08 = read_i32_le(buf, 0x8);
         if runtime_08 != -1 {
             return Err(VolitionError::ExpectedExactValue {
-                field: "MeshData::runtime_08",
+                field: "IndexBuffer::runtime_08",
                 expected: -1,
                 got: runtime_08,
             });
@@ -458,7 +455,7 @@ impl IndexBufferHeader {
         let runtime_0c = read_i32_le(buf, 0xc);
         if runtime_0c != -1 {
             return Err(VolitionError::ExpectedExactValue {
-                field: "MeshData::runtime_0c",
+                field: "IndexBuffer::runtime_0c",
                 expected: -1,
                 got: runtime_0c,
             });
@@ -467,7 +464,7 @@ impl IndexBufferHeader {
         let runtime_10 = read_u32_le(buf, 0x10);
         if runtime_10 != 0 {
             return Err(VolitionError::ExpectedExactValue {
-                field: "MeshData::runtime_10",
+                field: "IndexBuffer::runtime_10",
                 expected: 0,
                 got: runtime_10 as i32,
             });
@@ -486,7 +483,7 @@ impl IndexBufferHeader {
 
 #[derive(Debug, Clone)]
 #[repr(C)]
-pub struct VertexBufferHeader {
+pub struct VertexBuffer {
     /// Probably
     pub format: u8,
     pub num_uvs: u8,
@@ -498,7 +495,7 @@ pub struct VertexBufferHeader {
     pub unk_0c: i32,
 }
 
-impl VertexBufferHeader {
+impl VertexBuffer {
     pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
 

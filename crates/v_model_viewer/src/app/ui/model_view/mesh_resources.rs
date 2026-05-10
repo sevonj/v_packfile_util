@@ -9,9 +9,7 @@ use glam::Vec3;
 use wgpu::PipelineCompilationOptions;
 
 const CPU_SHADER: &str = include_str!("shad.wgsl");
-const fn cpu_vbuf_layout(
-    vertex_header: &v_types::VertexBufferHeader,
-) -> wgpu::VertexBufferLayout<'_> {
+const fn cpu_vbuf_layout(vertex_header: &v_types::VertexBuffer) -> wgpu::VertexBufferLayout<'_> {
     wgpu::VertexBufferLayout {
         array_stride: vertex_header.stride as wgpu::BufferAddress,
         step_mode: wgpu::VertexStepMode::Vertex,
@@ -77,7 +75,7 @@ struct Uniforms {
     _pad: f32,
 }
 
-struct CpuSubmesh {
+struct CpuMesh {
     vbufs: Vec<wgpu::Buffer>,
     ibuf: wgpu::Buffer,
     surfaces: Vec<v_types::Surface>,
@@ -88,7 +86,7 @@ pub struct StaticMeshResource {
     uniform_buf: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
     cpu_pipelines: Vec<wgpu::RenderPipeline>,
-    cpu_submeshes: Vec<CpuSubmesh>,
+    cpu_lods: Vec<CpuMesh>,
     bbox_pipeline: wgpu::RenderPipeline,
     bbox_vbuf: wgpu::Buffer,
 }
@@ -139,7 +137,7 @@ impl StaticMeshResource {
         });
 
         let mut cpu_pipelines = vec![];
-        for s in smesh.mesh.submeshes.iter().filter(|s| s.cpu.is_some()) {
+        for s in smesh.lods.iter().filter(|s| s.cpu.is_some()) {
             let cpu_data = s.cpu.as_ref().unwrap();
             for vertex_header in &cpu_data.vertex_headers {
                 let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -183,13 +181,12 @@ impl StaticMeshResource {
         }
 
         let mut base_pipeline_index = 0;
-        let cpu_submeshes = smesh
-            .mesh
-            .submeshes
+        let cpu_lods = smesh
+            .lods
             .iter()
-            .filter(|s: &&v_types::Submesh| s.cpu.is_some())
+            .filter(|s: &&v_types::Mesh| s.cpu.is_some())
             .map(|s| {
-                let cpu_data: &v_types::SubmeshData = s.cpu.as_ref().unwrap();
+                let cpu_data: &v_types::Submesh = s.cpu.as_ref().unwrap();
 
                 use wgpu::util::DeviceExt;
 
@@ -215,7 +212,7 @@ impl StaticMeshResource {
                     usage: wgpu::BufferUsages::INDEX,
                 });
 
-                let sub = CpuSubmesh {
+                let sub = CpuMesh {
                     vbufs,
                     ibuf,
                     surfaces: cpu_data.surfaces.clone(),
@@ -228,7 +225,7 @@ impl StaticMeshResource {
 
         let bbox_vbuf = {
             use wgpu::util::DeviceExt;
-            let verts = bbox_lines(&smesh.mesh.header.aabb);
+            let verts = bbox_lines(&smesh.mesh_header.aabb);
             device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("aabb_vbuf"),
                 contents: bytemuck::cast_slice(&verts),
@@ -279,7 +276,7 @@ impl StaticMeshResource {
             uniform_buf,
             bind_group,
             cpu_pipelines,
-            cpu_submeshes,
+            cpu_lods,
             bbox_pipeline,
             bbox_vbuf,
         }
@@ -307,6 +304,7 @@ pub struct StaticMeshCallback {
     pub show_cpu_geom: bool,
     pub show_bbox: bool,
     pub show_origin: bool,
+    pub visible_lod: usize,
 }
 
 impl CallbackTrait for StaticMeshCallback {
@@ -334,21 +332,20 @@ impl CallbackTrait for StaticMeshCallback {
             return;
         };
 
-        if self.show_cpu_geom {
+        if self.show_cpu_geom
+            && let Some(sub) = res.cpu_lods.get(self.visible_lod)
+        {
             rpass.set_bind_group(0, &res.bind_group, &[]);
-            for sub in &res.cpu_submeshes {
-                rpass.set_index_buffer(sub.ibuf.slice(..), wgpu::IndexFormat::Uint16);
+            rpass.set_index_buffer(sub.ibuf.slice(..), wgpu::IndexFormat::Uint16);
 
-                for surf in &sub.surfaces {
-                    let vbuf = &sub.vbufs[surf.vbuf as usize];
-                    rpass.set_pipeline(
-                        &res.cpu_pipelines[sub.base_pipeline_index + surf.vbuf as usize],
-                    );
-                    rpass.set_vertex_buffer(0, vbuf.slice(..));
-                    let indices = surf.start_index..(surf.start_index + surf.num_indices as u32);
-                    let base_vertex = surf.start_vertex as i32;
-                    rpass.draw_indexed(indices, base_vertex, 0..1);
-                }
+            for surf in &sub.surfaces {
+                let vbuf = &sub.vbufs[surf.vbuf as usize];
+                rpass
+                    .set_pipeline(&res.cpu_pipelines[sub.base_pipeline_index + surf.vbuf as usize]);
+                rpass.set_vertex_buffer(0, vbuf.slice(..));
+                let indices = surf.start_index..(surf.start_index + surf.num_indices as u32);
+                let base_vertex = surf.start_vertex as i32;
+                rpass.draw_indexed(indices, base_vertex, 0..1);
             }
         }
 

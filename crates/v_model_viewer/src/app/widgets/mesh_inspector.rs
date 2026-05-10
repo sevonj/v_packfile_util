@@ -3,14 +3,14 @@ use egui::UiBuilder;
 use egui::Widget;
 use egui_extras::Column;
 use egui_extras::TableBuilder;
-use v_types::IndexBufferHeader;
+use v_types::IndexBuffer;
 use v_types::Mesh;
 use v_types::MeshHeader;
+use v_types::StaticMesh;
 use v_types::Submesh;
-use v_types::SubmeshData;
+use v_types::SubmeshHeader;
 use v_types::Surface;
-use v_types::SurfaceHeader;
-use v_types::VertexBufferHeader;
+use v_types::VertexBuffer;
 
 use crate::app::widgets::VectorDisplay;
 
@@ -18,11 +18,11 @@ const ROW_H: f32 = 18.0;
 const SPACE: f32 = 8.0;
 
 pub struct MeshInspector<'a> {
-    mesh: &'a Mesh,
+    mesh: &'a StaticMesh,
 }
 
 impl<'a> MeshInspector<'a> {
-    pub fn new(mesh: &'a Mesh) -> Self {
+    pub fn new(mesh: &'a StaticMesh) -> Self {
         Self { mesh }
     }
 }
@@ -32,16 +32,16 @@ impl Widget for MeshInspector<'_> {
         ui.scope(|ui| {
             let mesh = self.mesh;
 
-            CollapsingHeader::new("Header").show(ui, |ui| {
-                header_ui(ui, &mesh.header);
-            });
+            ui.label("Geometry");
+
+            header_ui(ui, &mesh.mesh_header);
 
             ui.add_space(SPACE);
 
-            CollapsingHeader::new("Submeshes")
+            CollapsingHeader::new("Lods")
                 .default_open(true)
                 .show(ui, |ui| {
-                    submeshes_ui(ui, &mesh.submeshes);
+                    lods_ui(ui, &mesh.lods);
                 });
         })
         .response
@@ -84,74 +84,47 @@ fn header_ui(ui: &mut egui::Ui, header: &MeshHeader) {
 
         body.row(ROW_H, |mut row| {
             row.col(|ui| {
-                ui.label("unk_18:");
+                ui.label("Flags:");
             });
             row.col(|ui| {
-                ui.monospace(format!("{:08X?}", header.unk_18));
-            });
-        });
-
-        body.row(ROW_H, |mut row| {
-            row.col(|ui| {
-                ui.label("Submeshes:");
-            });
-            row.col(|ui| {
-                ui.label(format!("{}", header.num_submeshes));
+                ui.monospace(format!("{:08X?}", header.flags));
             });
         });
 
         body.row(ROW_H, |mut row| {
             row.col(|ui| {
-                ui.label("unk_1e:");
+                ui.label("Lods:");
             });
             row.col(|ui| {
-                ui.monospace(format!("{:04X?}", header.unk_1e));
-            });
-        });
-
-        body.row(ROW_H, |mut row| {
-            row.col(|ui| {
-                ui.label("ptr_gpu:");
-            });
-            row.col(|ui| {
-                ui.label(format!("{}", header.ptr_gpu));
-            });
-        });
-
-        body.row(ROW_H, |mut row| {
-            row.col(|ui| {
-                ui.label("ptr_cpu:");
-            });
-            row.col(|ui| {
-                ui.label(format!("{}", header.ptr_cpu));
+                ui.label(format!("{}", header.num_lods));
             });
         });
     });
 }
 
-fn submeshes_ui(ui: &mut egui::Ui, submeshes: &[Submesh]) {
+fn lods_ui(ui: &mut egui::Ui, submeshes: &[Mesh]) {
     for (i, submesh) in submeshes.iter().enumerate() {
         CollapsingHeader::new(i.to_string())
             .enabled(submesh.gpu.is_some())
             .show(ui, |ui| {
                 ui.scope_builder(UiBuilder::new().id_salt("gpu"), |ui| {
-                    ui.weak("GPU Geometry");
+                    ui.weak("Submeshes (GPU)");
                     let Some(data) = &submesh.gpu else {
                         ui.label("Doesn't exist");
                         return;
                     };
-                    submesh_data_ui(ui, data);
+                    submesh_ui(ui, data);
                 });
 
                 ui.separator();
 
                 ui.scope_builder(UiBuilder::new().id_salt("cpu"), |ui| {
-                    ui.weak("CPU Geometry");
+                    ui.weak("Submeshes (CPU)");
                     let Some(data) = &submesh.cpu else {
                         ui.label("Doesn't exist");
                         return;
                     };
-                    submesh_data_ui(ui, data);
+                    submesh_ui(ui, data);
                 });
             })
             .header_response
@@ -159,8 +132,8 @@ fn submeshes_ui(ui: &mut egui::Ui, submeshes: &[Submesh]) {
     }
 }
 
-fn submesh_data_ui(ui: &mut egui::Ui, data: &SubmeshData) {
-    surf_header_ui(ui, &data.surface_header);
+fn submesh_ui(ui: &mut egui::Ui, data: &Submesh) {
+    submesh_header_ui(ui, &data.surface_header);
 
     CollapsingHeader::new("Surfaces")
         .default_open(true)
@@ -183,16 +156,11 @@ fn submesh_data_ui(ui: &mut egui::Ui, data: &SubmeshData) {
         .on_disabled_hover_text("Doesn't exist");
 }
 
-fn surf_header_ui(ui: &mut egui::Ui, header: &SurfaceHeader) {
+fn submesh_header_ui(ui: &mut egui::Ui, header: &SubmeshHeader) {
     let table_builder = TableBuilder::new(ui)
         .striped(true)
         .vscroll(false)
-        .column(Column::remainder())
-        .header(ROW_H, |mut row| {
-            row.col(|ui| {
-                ui.weak("Surface Header");
-            });
-        });
+        .column(Column::remainder());
 
     table_builder.body(|mut body| {
         body.row(ROW_H, |mut row| {
@@ -212,37 +180,10 @@ fn surf_header_ui(ui: &mut egui::Ui, header: &SurfaceHeader) {
                 });
             });
         });
-
-        body.row(ROW_H, |mut row| {
-            row.col(|ui| {
-                ui.horizontal(|ui| {
-                    ui.label("unk_04:");
-                    ui.monospace(format!("{:08X?}", header.unk_04));
-                });
-            });
-        });
-
-        body.row(ROW_H, |mut row| {
-            row.col(|ui| {
-                ui.horizontal(|ui| {
-                    ui.label("unk_08:");
-                    ui.monospace(format!("{:08X?}", header.unk_08));
-                });
-            });
-        });
-
-        body.row(ROW_H, |mut row| {
-            row.col(|ui| {
-                ui.horizontal(|ui| {
-                    ui.label("unk_0c:");
-                    ui.monospace(format!("{:08X?}", header.unk_0c));
-                });
-            });
-        });
     });
 }
 
-fn index_header_ui(ui: &mut egui::Ui, header: &IndexBufferHeader) {
+fn index_header_ui(ui: &mut egui::Ui, header: &IndexBuffer) {
     let table_builder = TableBuilder::new(ui)
         .striped(true)
         .vscroll(false)
@@ -326,7 +267,7 @@ fn surfaces_ui(ui: &mut egui::Ui, surfaces: &[Surface]) {
     });
 }
 
-fn vbufs_ui(ui: &mut egui::Ui, vbufs: &[VertexBufferHeader]) {
+fn vbufs_ui(ui: &mut egui::Ui, vbufs: &[VertexBuffer]) {
     let num_vbufs = vbufs.len();
 
     let table_builder = TableBuilder::new(ui)

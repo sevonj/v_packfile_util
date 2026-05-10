@@ -5,6 +5,7 @@ use std::time::Instant;
 
 use eframe::egui_wgpu::RenderState;
 use egui::Button;
+use egui::ComboBox;
 use egui::Frame;
 use egui::Panel;
 use egui::ScrollArea;
@@ -44,6 +45,8 @@ pub struct ModelView {
     pub view_mode: ViewMode,
     pub show_bbox: bool,
     pub show_origin: bool,
+    visible_lod: usize,
+    num_lods: usize,
 }
 
 impl ModelView {
@@ -74,6 +77,8 @@ impl ModelView {
             view_mode: ViewMode::SampleText,
             show_bbox: true,
             show_origin: false,
+            visible_lod: 0,
+            num_lods: smesh.mesh_header.num_lods as usize,
         }
     }
 
@@ -104,7 +109,7 @@ impl ModelView {
 
             match self.view_mode {
                 ViewMode::SampleText => {
-                    if model_data.smesh.mesh.has_cpu_geometry() {
+                    if model_data.smesh.mesh_header.has_cpu_geometry() {
                         ui.painter().add(egui_wgpu::Callback::new_paint_callback(
                             rect,
                             StaticMeshCallback {
@@ -113,6 +118,7 @@ impl ModelView {
                                 show_cpu_geom: true,
                                 show_bbox: self.show_bbox,
                                 show_origin: self.show_origin,
+                                visible_lod: self.visible_lod,
                             },
                         ));
                     }
@@ -166,6 +172,20 @@ impl ModelView {
                     .show_inside(ui, |ui| {
                         OSD_FRAME.show(ui, |ui| {
                             ui.horizontal(|ui| {
+                                ComboBox::from_id_salt("lod")
+                                    .selected_text(format!("Lod {}", self.visible_lod))
+                                    .show_ui(ui, |ui| {
+                                        for i in 0..self.num_lods {
+                                            ui.selectable_value(
+                                                &mut self.visible_lod,
+                                                i,
+                                                format!("Lod {i}"),
+                                            );
+                                        }
+                                    });
+
+                                ui.separator();
+
                                 if ui
                                     .selectable_value(
                                         &mut self.view_mode,
@@ -213,10 +233,7 @@ impl ModelView {
                     });
 
                 Frame::NONE.inner_margin(4).show(ui, |ui| {
-                    ui.monospace(format!(
-                        "{} submeshes",
-                        model_data.smesh.mesh.submeshes.len()
-                    ));
+                    ui.monospace(format!("{} submeshes", model_data.smesh.lods.len()));
                     ui.monospace(format!(
                         "{} materials",
                         model_data.smesh.matlib.materials.len()
@@ -226,7 +243,7 @@ impl ModelView {
 
                 match self.view_mode {
                     ViewMode::SampleText => {
-                        if !model_data.smesh.mesh.has_cpu_geometry() {
+                        if !model_data.smesh.mesh_header.has_cpu_geometry() {
                             ui.add(StatusPage::new(
                                 "Model Has No CPU Geometry",
                                 "Nothing to show",
