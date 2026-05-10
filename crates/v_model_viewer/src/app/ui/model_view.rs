@@ -87,45 +87,46 @@ impl ModelView {
         let rect = ui.available_rect_before_wrap();
 
         // paint
-        {
-            let view_off_px = -(rect.width() - (rect.width() - INSPECTOR_W)) / 2.0;
-            let view_off_n = view_off_px / (rect.width() / 2.0);
-            let view_off_xf = Mat4::from_translation(Vec3::new(view_off_n, 0.0, 0.0));
 
-            let aspect = rect.width() / rect.height();
-            let proj = view_off_xf
-                * Mat4::perspective_rh(
-                    45_f32.to_radians(),
-                    aspect,
-                    0.1 / self.zoom,
-                    100.0 / self.zoom,
-                );
+        let view_off_px = -(rect.width() - (rect.width() - INSPECTOR_W)) / 2.0;
+        let view_off_n = view_off_px / (rect.width() / 2.0);
+        let view_off_xf = Mat4::from_translation(Vec3::new(view_off_n, 0.0, 0.0));
 
-            let eye = Mat4::from_rotation_x(self.angle_x)
-                .transform_vector3(self.camera_pos + Vec3::new(0.0, 0.0, 1.0 / self.zoom));
+        let aspect = rect.width() / rect.height();
+        let proj = view_off_xf
+            * Mat4::perspective_rh(
+                45_f32.to_radians(),
+                aspect,
+                0.1 / self.zoom,
+                100.0 / self.zoom,
+            );
 
-            let view = Mat4::look_at_rh(eye, self.camera_pos, Vec3::Y);
-            let model = Mat4::from_rotation_y(self.angle_y);
-            let light = Vec3::new(1.0, -1.0, 1.0);
+        let orbit_off = Mat4::from_rotation_x(self.angle_x).transform_vector3(Vec3::new(
+            0.0,
+            0.0,
+            1.0 / self.zoom,
+        ));
+        let view = Mat4::look_at_rh(self.camera_pos + orbit_off, self.camera_pos, Vec3::Y);
+        let model = Mat4::from_rotation_y(self.angle_y);
+        let light = Vec3::new(1.0, -1.0, 1.0);
 
-            match self.view_mode {
-                ViewMode::SampleText => {
-                    if model_data.smesh.mesh_header.has_cpu_geometry() {
-                        ui.painter().add(egui_wgpu::Callback::new_paint_callback(
-                            rect,
-                            StaticMeshCallback {
-                                view: proj * view * model,
-                                light,
-                                show_cpu_geom: true,
-                                show_bbox: self.show_bbox,
-                                show_origin: self.show_origin,
-                                visible_lod: self.visible_lod,
-                            },
-                        ));
-                    }
+        match self.view_mode {
+            ViewMode::SampleText => {
+                if model_data.smesh.mesh_header.has_cpu_geometry() {
+                    ui.painter().add(egui_wgpu::Callback::new_paint_callback(
+                        rect,
+                        StaticMeshCallback {
+                            view: proj * view * model,
+                            light,
+                            show_cpu_geom: true,
+                            show_bbox: self.show_bbox,
+                            show_origin: self.show_origin,
+                            visible_lod: self.visible_lod,
+                        },
+                    ));
                 }
-                ViewMode::BottomText => (),
             }
+            ViewMode::BottomText => (),
         }
 
         let now = Instant::now();
@@ -207,6 +208,35 @@ impl ModelView {
                             .show_separator_line(false)
                             .show_inside(ui, |ui| {
                                 ui.horizontal(|ui| {
+                                    OSD_FRAME.show(ui, |ui| {
+                                        ui.set_height(18.0);
+
+                                        ui.menu_button(
+                                            include_image!("../../../assets/icon_camera.svg"),
+                                            |ui| {
+                                                if ui.button("Recenter").clicked() {
+                                                    self.camera_pos = Vec3 {
+                                                        x: model_data
+                                                            .smesh
+                                                            .header
+                                                            .bounding_center
+                                                            .x,
+                                                        y: model_data
+                                                            .smesh
+                                                            .header
+                                                            .bounding_center
+                                                            .y,
+                                                        z: model_data
+                                                            .smesh
+                                                            .header
+                                                            .bounding_center
+                                                            .z,
+                                                    };
+                                                }
+                                            },
+                                        );
+                                    });
+
                                     OSD_FRAME.show(ui, |ui| {
                                         ui.set_height(18.0);
 
@@ -299,9 +329,21 @@ impl ModelView {
 
         if drag.length() > 0.0 {
             self.last_touch = now;
-            self.angle_y += drag.x * 0.01;
-            self.angle_x -= drag.y * 0.01;
-            self.angle_x = self.angle_x.clamp(-1.57, 1.57)
+            let modifiers = ui.input(|i| i.modifiers);
+            if modifiers.is_none() {
+                self.angle_y += drag.x * 0.01;
+                self.angle_x -= drag.y * 0.01;
+                self.angle_x = self.angle_x.clamp(-1.57, 1.57);
+            } else if modifiers.shift_only() {
+                self.camera_pos += view.transform_vector3(Vec3::new(-1.0, 0.0, 0.0)) * drag.x
+                    / self.zoom
+                    / rect.height();
+                self.camera_pos += Mat4::from_rotation_x(self.angle_x)
+                    .transform_vector3(Vec3::new(0.0, 1.0, 0.0))
+                    * drag.y
+                    / self.zoom
+                    / rect.height();
+            }
         }
 
         if self.spin && (now - self.last_touch).as_secs() >= SPIN_ENABLE_DELAY {
