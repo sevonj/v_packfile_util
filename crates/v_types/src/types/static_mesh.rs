@@ -1,6 +1,6 @@
-use crate::Matlib;
-use crate::Mesh;
-use crate::MeshHeader;
+use crate::LodMeshData;
+use crate::LodMeshHeader;
+use crate::MaterialsData;
 use crate::Quaternion;
 use crate::Vector;
 use crate::VolitionError;
@@ -20,9 +20,9 @@ pub struct StaticMesh {
     pub navpoints: Vec<StaticMeshNavpoint>,
     /// Maybe.
     pub bone_indices: Vec<i32>,
-    pub matlib: Matlib,
-    pub mesh_header: MeshHeader,
-    pub lods: Vec<Mesh>,
+    pub matlib: MaterialsData,
+    pub mesh_header: LodMeshHeader,
+    pub lod_meshes: Vec<LodMeshData>,
 }
 
 impl StaticMesh {
@@ -70,12 +70,12 @@ impl StaticMesh {
         }
 
         align(data_offset, 4);
-        let matlib = Matlib::from_data(buf, data_offset)?;
+        let matlib = MaterialsData::from_data(buf, data_offset)?;
 
-        let mesh_header = MeshHeader::from_data(&buf[*data_offset..])?;
-        *data_offset += size_of::<MeshHeader>();
+        let mesh_header = LodMeshHeader::from_data(&buf[*data_offset..])?;
+        *data_offset += size_of::<LodMeshHeader>();
 
-        let lods = mesh_header.read_data(buf, data_offset, header.unk_2c)?;
+        let lod_meshes = mesh_header.read_data(buf, data_offset, header.unk_2c)?;
 
         Ok(Self {
             header,
@@ -85,7 +85,7 @@ impl StaticMesh {
             bone_indices,
             matlib,
             mesh_header,
-            lods,
+            lod_meshes,
         })
     }
 
@@ -93,7 +93,7 @@ impl StaticMesh {
         let mut out = String::new();
 
         let mut next_index = 1;
-        for (i, mesh) in self.lods.iter().enumerate() {
+        for (i, mesh) in self.lod_meshes.iter().enumerate() {
             let Some(geom) = &mesh.cpu_geometry else {
                 continue;
             };
@@ -128,6 +128,7 @@ impl StaticMesh {
     }
 }
 
+/// 1:1 from disk
 #[derive(Debug, Clone)]
 #[repr(C)]
 pub struct StaticMeshHeader {
@@ -211,9 +212,10 @@ impl StaticMeshHeader {
     }
 }
 
+/// 1:1 from disk
 /// Navigation reference point
 /// Used for IK?
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 #[repr(C)]
 pub struct StaticMeshNavpoint {
     /// name to reference nav point by

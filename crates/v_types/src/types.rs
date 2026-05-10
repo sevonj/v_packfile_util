@@ -8,14 +8,14 @@ mod vector;
 
 pub use aabb::AABB;
 pub use material::Material;
-pub use material::MaterialBlock;
 pub use material::MaterialTextureEntry;
 pub use material::MaterialUnknown3;
-pub use material::Matlib;
+pub use material::MaterialsData;
+pub use material::MaterialsHeader;
 pub use mesh::Geometry;
-pub use mesh::GeometryHeader;
 pub use mesh::IndexBuffer;
-pub use mesh::Mesh;
+pub use mesh::LodMeshData;
+pub use mesh::LodMeshHeader;
 pub use mesh::MeshHeader;
 pub use mesh::Surface;
 pub use mesh::VertexBuffer;

@@ -10,6 +10,7 @@
 use crate::VolitionError;
 use crate::util::*;
 
+/// 1:1 from disk
 /// 3D float vector
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(C)]

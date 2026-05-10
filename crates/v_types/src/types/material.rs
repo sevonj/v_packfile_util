@@ -7,8 +7,9 @@ pub const MAX_UNKNOWN3S: u32 = 2000;
 pub const MAX_UNKNOWN4S: u16 = 50;
 pub const MAX_UKNOWN4_VALUE: usize = 0xffff;
 
+/// Deserialized
 #[derive(Debug, Clone)]
-pub struct Matlib {
+pub struct MaterialsData {
     pub materials: Vec<Material>,
     pub mat_unk1s: Vec<[u8; 16]>,
     pub mat_consts: Vec<f32>,
@@ -17,10 +18,10 @@ pub struct Matlib {
     pub mat_unknown4s: Vec<i32>,
 }
 
-impl Matlib {
+impl MaterialsData {
     pub fn from_data(buf: &[u8], data_offset: &mut usize) -> Result<Self, VolitionError> {
-        let material_block = MaterialBlock::from_data(&buf[*data_offset..])?;
-        *data_offset += size_of::<MaterialBlock>();
+        let material_block = MaterialsHeader::from_data(&buf[*data_offset..])?;
+        *data_offset += size_of::<MaterialsHeader>();
 
         let num_materials = material_block.num_materials as usize;
         let num_mat_consts = material_block.num_shader_consts as usize;
@@ -107,10 +108,10 @@ impl Matlib {
     }
 }
 
-/// Appears at least in city chunks and static meshes
+/// 1:1 from disk
 #[derive(Debug, Clone)]
 #[repr(C)]
-pub struct MaterialBlock {
+pub struct MaterialsHeader {
     /// Number of [MaterialData] immediately after this header.
     pub num_materials: u32,
     /// Always Zero.
@@ -130,7 +131,7 @@ pub struct MaterialBlock {
     pub unknown_20: i32,
 }
 
-impl MaterialBlock {
+impl MaterialsHeader {
     pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
 
@@ -228,6 +229,7 @@ impl MaterialBlock {
     }
 }
 
+/// 1:1 from disk
 #[derive(Debug, Clone)]
 #[repr(C)]
 pub struct Material {
@@ -277,6 +279,7 @@ impl Material {
     }
 }
 
+/// 1:1 from disk
 #[derive(Debug, Clone)]
 #[repr(C)]
 pub struct MaterialTextureEntry {
@@ -311,6 +314,7 @@ impl MaterialTextureEntry {
     }
 }
 
+/// 1:1 from disk
 #[derive(Debug, Clone)]
 #[repr(C)]
 pub struct MaterialUnknown3 {
@@ -360,7 +364,7 @@ mod tests {
 
     #[test]
     fn test_material_block_size() {
-        assert_eq!(size_of::<MaterialBlock>(), 0x24);
+        assert_eq!(size_of::<MaterialsHeader>(), 0x24);
     }
 
     #[test]

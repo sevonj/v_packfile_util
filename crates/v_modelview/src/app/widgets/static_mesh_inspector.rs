@@ -9,7 +9,7 @@ use v_types::StaticMeshHeader;
 use v_types::StaticMeshNavpoint;
 
 use crate::app::widgets::FloatDisplay;
-use crate::app::widgets::MeshInspector;
+use crate::app::widgets::LodMeshInspector;
 use crate::app::widgets::QuatDisplay;
 use crate::app::widgets::VectorDisplay;
 
@@ -76,7 +76,7 @@ impl Widget for StaticMeshInspector<'_> {
 
             ui.add_space(SPACE);
 
-            ui.add(MeshInspector::new(smesh))
+            ui.add(LodMeshInspector::new(smesh))
         })
         .response
     }
@@ -239,7 +239,7 @@ fn navpoints_ui(ui: &mut egui::Ui, navpoints: &[StaticMeshNavpoint]) {
     table_builder.body(|body| {
         body.rows(ROW_H * 3.0, num_navpoints, |mut row| {
             let idx = row.index();
-            let navpoint = navpoints[idx];
+            let navpoint = &navpoints[idx];
             row.col(|ui| {
                 ui.spacing_mut().item_spacing.y = 0.0;
                 ui.vertical(|ui| {

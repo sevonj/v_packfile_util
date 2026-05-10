@@ -44,9 +44,11 @@ enum VertexAttributeTypes {
     Num,
 }
 
+/// 1:1 from disk
+/// Model with multiple lods
 #[derive(Debug, Clone)]
 #[repr(C)]
-pub struct MeshHeader {
+pub struct LodMeshHeader {
     pub bbox: AABB,
     pub flags: i32,
     pub num_lods: u32,
@@ -54,7 +56,7 @@ pub struct MeshHeader {
     pub ptr_cpu: i32,
 }
 
-impl MeshHeader {
+impl LodMeshHeader {
     pub const MAX_LODS: u32 = 100;
 
     pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
@@ -110,7 +112,7 @@ impl MeshHeader {
         buf: &[u8],
         data_offset: &mut usize,
         unk_2c: i32,
-    ) -> Result<Vec<Mesh>, VolitionError> {
+    ) -> Result<Vec<LodMeshData>, VolitionError> {
         let num_lods = self.num_lods as usize;
 
         let unk_20b = if unk_2c != 0 {
@@ -123,21 +125,21 @@ impl MeshHeader {
 
         align(data_offset, 16);
 
-        let mut meshes: Vec<Mesh> = Vec::with_capacity(num_lods);
+        let mut meshes: Vec<LodMeshData> = Vec::with_capacity(num_lods);
 
         let num_lods = self.num_lods as usize;
 
         let mut gpu_headers = Vec::with_capacity(num_lods);
         for _ in 0..num_lods {
-            gpu_headers.push(GeometryHeader::from_data(&buf[*data_offset..])?);
-            *data_offset += size_of::<GeometryHeader>();
+            gpu_headers.push(MeshHeader::from_data(&buf[*data_offset..])?);
+            *data_offset += size_of::<MeshHeader>();
         }
 
         let cpu_headers = if self.has_cpu_geometry() {
             let mut headers = Vec::with_capacity(num_lods);
             for _ in 0..num_lods {
-                headers.push(Some(GeometryHeader::from_data(&buf[*data_offset..])?));
-                *data_offset += size_of::<GeometryHeader>();
+                headers.push(Some(MeshHeader::from_data(&buf[*data_offset..])?));
+                *data_offset += size_of::<MeshHeader>();
             }
             headers
         } else {
@@ -149,8 +151,8 @@ impl MeshHeader {
 
         #[allow(clippy::type_complexity)]
         let mut ret: Vec<(
-            (GeometryHeader, Vec<Surface>),
-            Option<(GeometryHeader, Vec<Surface>)>,
+            (MeshHeader, Vec<Surface>),
+            Option<(MeshHeader, Vec<Surface>)>,
         )> = Vec::with_capacity(num_lods);
 
         for (ghead, chead) in gpu_headers.into_iter().zip(cpu_headers) {
@@ -285,7 +287,7 @@ impl MeshHeader {
                 (vec![], vec![])
             };
 
-            meshes.push(Mesh {
+            meshes.push(LodMeshData {
                 gpu_geometry: gpu,
                 cpu_geometry: cpu,
                 unk_20b,
@@ -298,7 +300,7 @@ impl MeshHeader {
 }
 
 #[derive(Debug, Clone)]
-pub struct Mesh {
+pub struct LodMeshData {
     /// Headers for geometry that lives in VRAM
     pub gpu_geometry: Geometry,
     /// Headers for geometry that lives in CPU RAM
@@ -316,25 +318,30 @@ pub struct Mesh {
     pub cpu_idata: Vec<u8>,
 }
 
+/// Deserialized
 #[derive(Debug, Clone)]
 pub struct Geometry {
-    pub surface_header: GeometryHeader,
+    pub surface_header: MeshHeader,
     pub surfaces: Vec<Surface>,
     pub index_header: IndexBuffer,
     pub vertex_headers: Vec<VertexBuffer>,
 }
 
+/// 1:1 from disk
 #[derive(Debug, Clone)]
 #[repr(C)]
-pub struct GeometryHeader {
+pub struct MeshHeader {
     pub unk_00: i16,
     pub num_surfaces: u16,
-    pub unk_04: i32,
-    pub unk_08: i32,
+    /// Always -1
+    pub ptr_04: i32,
+    /// Always -1
+    pub ptr_08: i32,
+    /// Always 0
     pub unk_0c: i32,
 }
 
-impl GeometryHeader {
+impl MeshHeader {
     pub const MAX_SURFACES: u16 = 100;
 
     pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
@@ -349,21 +356,21 @@ impl GeometryHeader {
             });
         }
 
-        let unk_04 = read_i32_le(buf, 0x4);
-        if unk_04 != -1 {
+        let ptr_04 = read_i32_le(buf, 0x4);
+        if ptr_04 != -1 {
             return Err(VolitionError::ExpectedExactValue {
                 field: "GeometryHeader::unk_04",
                 expected: -1,
-                got: unk_04,
+                got: ptr_04,
             });
         }
 
-        let unk_08 = read_i32_le(buf, 0x8);
-        if unk_08 != -1 {
+        let ptr_08 = read_i32_le(buf, 0x8);
+        if ptr_08 != -1 {
             return Err(VolitionError::ExpectedExactValue {
                 field: "GeometryHeader::unk_08",
                 expected: -1,
-                got: unk_08,
+                got: ptr_08,
             });
         }
 
@@ -379,8 +386,8 @@ impl GeometryHeader {
         Ok(Self {
             unk_00: read_i16_le(buf, 0x0),
             num_surfaces,
-            unk_04,
-            unk_08,
+            ptr_04,
+            ptr_08,
             unk_0c,
         })
     }
@@ -400,6 +407,7 @@ impl GeometryHeader {
     }
 }
 
+/// 1:1 from disk
 #[derive(Debug, Clone)]
 #[repr(C)]
 pub struct Surface {
@@ -426,6 +434,7 @@ impl Surface {
     }
 }
 
+/// 1:1 from disk
 #[derive(Debug, Clone)]
 #[repr(C)]
 pub struct IndexBuffer {
@@ -482,6 +491,7 @@ impl IndexBuffer {
     }
 }
 
+/// 1:1 from disk
 #[derive(Debug, Clone)]
 #[repr(C)]
 pub struct VertexBuffer {

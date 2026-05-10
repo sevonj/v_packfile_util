@@ -87,7 +87,7 @@ pub fn cpu_geom_pipelines(
     });
 
     let mut cpu_pipelines = vec![];
-    for s in smesh.lods.iter().filter(|s| s.cpu_geometry.is_some()) {
+    for s in smesh.lod_meshes.iter().filter(|s| s.cpu_geometry.is_some()) {
         let cpu_data = s.cpu_geometry.as_ref().unwrap();
         for vertex_header in &cpu_data.vertex_headers {
             let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -135,9 +135,9 @@ pub fn cpu_geom_pipelines(
 pub fn cpu_geom_lods(device: &wgpu::Device, smesh: &v_types::StaticMesh) -> Vec<CpuMesh> {
     let mut base_pipeline_index = 0;
     smesh
-        .lods
+        .lod_meshes
         .iter()
-        .filter(|s: &&v_types::Mesh| s.cpu_geometry.is_some())
+        .filter(|s: &&v_types::LodMeshData| s.cpu_geometry.is_some())
         .map(|s| {
             let cpu_data: &v_types::Geometry = s.cpu_geometry.as_ref().unwrap();
 

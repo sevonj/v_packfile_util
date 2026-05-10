@@ -2,7 +2,8 @@ use crate::Vector;
 use crate::VolitionError;
 use crate::util::*;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// 1:1 from disk
+#[derive(Debug, Clone, PartialEq)]
 #[repr(C)]
 pub struct AABB {
     pub min: Vector,

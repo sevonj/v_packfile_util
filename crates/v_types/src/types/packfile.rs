@@ -1,7 +1,8 @@
 use crate::error::VolitionError;
 use crate::util::*;
 
-#[derive(Debug, Clone, Copy)]
+/// 1:1 from disk
+#[derive(Debug, Clone)]
 #[repr(C)]
 pub struct Packfile {
     pub magic: i32,
@@ -223,7 +224,8 @@ impl Packfile {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+/// 1:1 from disk
+#[derive(Debug, Clone)]
 #[repr(C)]
 pub struct PackfileEntry {
     /// Offset of file stem (name without extension) in stem block
