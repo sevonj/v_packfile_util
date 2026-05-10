@@ -93,16 +93,16 @@ impl StaticMesh {
         let mut out = String::new();
 
         let mut next_index = 1;
-        for (i, submesh) in self.lods.iter().enumerate() {
-            let Some(cpu_submesh) = &submesh.cpu else {
+        for (i, mesh) in self.lods.iter().enumerate() {
+            let Some(geom) = &mesh.cpu_geometry else {
                 continue;
             };
-            out += &format!("g submesh_{}\n", i);
+            out += &format!("g lod_{}\n", i);
 
-            let vbuf = &submesh.cpu_vdata;
+            let vbuf = &mesh.cpu_vdata;
             let mut voff = 0;
             let mut added_vertices = 0;
-            for vhead in &cpu_submesh.vertex_headers {
+            for vhead in &geom.vertex_headers {
                 assert_eq!(vhead.stride, 12);
                 for _ in 0..vhead.num_vertices {
                     let v = Vector::from_data(&vbuf[voff..]).unwrap();
@@ -112,9 +112,9 @@ impl StaticMesh {
                 added_vertices += vhead.num_vertices as usize;
             }
 
-            let ibuf = &submesh.cpu_idata;
+            let ibuf = &mesh.cpu_idata;
             let mut ioff = 0;
-            for _ in 0..cpu_submesh.index_header.num_indices - 2 {
+            for _ in 0..geom.index_header.num_indices - 2 {
                 let a = next_index + read_u16_le(ibuf, ioff) as usize;
                 let b = next_index + read_u16_le(ibuf, ioff + 2) as usize;
                 let c = next_index + read_u16_le(ibuf, ioff + 4) as usize;

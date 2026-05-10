@@ -301,7 +301,7 @@ impl ModelView {
                     });
 
                 Frame::NONE.inner_margin(4).show(ui, |ui| {
-                    ui.monospace(format!("{} submeshes", model_data.smesh.lods.len()));
+                    ui.monospace(format!("{} lods", model_data.smesh.lods.len()));
                     ui.monospace(format!(
                         "{} materials",
                         model_data.smesh.matlib.materials.len()

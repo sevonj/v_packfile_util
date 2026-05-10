@@ -123,21 +123,21 @@ impl MeshHeader {
 
         align(data_offset, 16);
 
-        let mut submeshes: Vec<Mesh> = Vec::with_capacity(num_lods);
+        let mut meshes: Vec<Mesh> = Vec::with_capacity(num_lods);
 
         let num_lods = self.num_lods as usize;
 
         let mut gpu_headers = Vec::with_capacity(num_lods);
         for _ in 0..num_lods {
-            gpu_headers.push(SubmeshHeader::from_data(&buf[*data_offset..])?);
-            *data_offset += size_of::<SubmeshHeader>();
+            gpu_headers.push(GeometryHeader::from_data(&buf[*data_offset..])?);
+            *data_offset += size_of::<GeometryHeader>();
         }
 
         let cpu_headers = if self.has_cpu_geometry() {
             let mut headers = Vec::with_capacity(num_lods);
             for _ in 0..num_lods {
-                headers.push(Some(SubmeshHeader::from_data(&buf[*data_offset..])?));
-                *data_offset += size_of::<SubmeshHeader>();
+                headers.push(Some(GeometryHeader::from_data(&buf[*data_offset..])?));
+                *data_offset += size_of::<GeometryHeader>();
             }
             headers
         } else {
@@ -149,8 +149,8 @@ impl MeshHeader {
 
         #[allow(clippy::type_complexity)]
         let mut ret: Vec<(
-            (SubmeshHeader, Vec<Surface>),
-            Option<(SubmeshHeader, Vec<Surface>)>,
+            (GeometryHeader, Vec<Surface>),
+            Option<(GeometryHeader, Vec<Surface>)>,
         )> = Vec::with_capacity(num_lods);
 
         for (ghead, chead) in gpu_headers.into_iter().zip(cpu_headers) {
@@ -199,7 +199,7 @@ impl MeshHeader {
                     *data_offset += size_of::<VertexBuffer>();
                 }
 
-                Submesh {
+                Geometry {
                     surface_header,
                     surfaces,
                     index_header,
@@ -254,7 +254,7 @@ impl MeshHeader {
                     *data_offset += size_of::<VertexBuffer>();
                 }
 
-                Some(Submesh {
+                Some(Geometry {
                     surface_header,
                     surfaces,
                     index_header,
@@ -264,12 +264,12 @@ impl MeshHeader {
                 None
             };
 
-            let (cpu_vdata, cpu_idata) = if let Some(submesh) = &cpu {
-                let num_indices = submesh.index_header.num_indices as usize;
+            let (cpu_vdata, cpu_idata) = if let Some(geom) = &cpu {
+                let num_indices = geom.index_header.num_indices as usize;
 
                 align(data_offset, 16);
                 let mut len_cpu_vdata = 0;
-                for vhead in &submesh.vertex_headers {
+                for vhead in &geom.vertex_headers {
                     len_cpu_vdata += vhead.num_vertices as usize * vhead.stride as usize;
                     align(&mut len_cpu_vdata, 16);
                 }
@@ -285,28 +285,28 @@ impl MeshHeader {
                 (vec![], vec![])
             };
 
-            submeshes.push(Mesh {
-                gpu,
-                cpu,
+            meshes.push(Mesh {
+                gpu_geometry: gpu,
+                cpu_geometry: cpu,
                 unk_20b,
                 cpu_vdata,
                 cpu_idata,
             });
         }
-        Ok(submeshes)
+        Ok(meshes)
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Mesh {
     /// Headers for geometry that lives in VRAM
-    pub gpu: Submesh,
+    pub gpu_geometry: Geometry,
     /// Headers for geometry that lives in CPU RAM
     /// Purpose unknown, sometimes not present
     /// No materials or attributes;
     /// Always has exactly one vertex buffer?
     /// If exists, number of surfaces matches gpu data
-    pub cpu: Option<Submesh>,
+    pub cpu_geometry: Option<Geometry>,
     pub unk_20b: Option<[u8; 20]>,
     /// CPU vertex buffer in raw bytes. Empty if `cpu` == `None`
     /// Format is always 3xf32 coords only
@@ -317,8 +317,8 @@ pub struct Mesh {
 }
 
 #[derive(Debug, Clone)]
-pub struct Submesh {
-    pub surface_header: SubmeshHeader,
+pub struct Geometry {
+    pub surface_header: GeometryHeader,
     pub surfaces: Vec<Surface>,
     pub index_header: IndexBuffer,
     pub vertex_headers: Vec<VertexBuffer>,
@@ -326,7 +326,7 @@ pub struct Submesh {
 
 #[derive(Debug, Clone)]
 #[repr(C)]
-pub struct SubmeshHeader {
+pub struct GeometryHeader {
     pub unk_00: i16,
     pub num_surfaces: u16,
     pub unk_04: i32,
@@ -334,7 +334,7 @@ pub struct SubmeshHeader {
     pub unk_0c: i32,
 }
 
-impl SubmeshHeader {
+impl GeometryHeader {
     pub const MAX_SURFACES: u16 = 100;
 
     pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
@@ -343,7 +343,7 @@ impl SubmeshHeader {
         let num_surfaces = read_u16_le(buf, 0x2);
         if num_surfaces > Self::MAX_SURFACES {
             return Err(VolitionError::ValueTooHigh {
-                field: "SubmeshHeader::num_surfaces",
+                field: "GeometryHeader::num_surfaces",
                 max: Self::MAX_SURFACES as usize,
                 got: num_surfaces as usize,
             });
@@ -352,7 +352,7 @@ impl SubmeshHeader {
         let unk_04 = read_i32_le(buf, 0x4);
         if unk_04 != -1 {
             return Err(VolitionError::ExpectedExactValue {
-                field: "SubmeshHeader::unk_04",
+                field: "GeometryHeader::unk_04",
                 expected: -1,
                 got: unk_04,
             });
@@ -361,7 +361,7 @@ impl SubmeshHeader {
         let unk_08 = read_i32_le(buf, 0x8);
         if unk_08 != -1 {
             return Err(VolitionError::ExpectedExactValue {
-                field: "SubmeshHeader::unk_08",
+                field: "GeometryHeader::unk_08",
                 expected: -1,
                 got: unk_08,
             });
@@ -370,7 +370,7 @@ impl SubmeshHeader {
         let unk_0c = read_i32_le(buf, 0xc);
         if unk_0c != 0 {
             return Err(VolitionError::ExpectedExactValue {
-                field: "SubmeshHeader::unk_0c",
+                field: "GeometryHeader::unk_0c",
                 expected: 0,
                 got: unk_0c,
             });

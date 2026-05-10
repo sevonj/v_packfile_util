@@ -3,12 +3,12 @@ use egui::UiBuilder;
 use egui::Widget;
 use egui_extras::Column;
 use egui_extras::TableBuilder;
+use v_types::Geometry;
+use v_types::GeometryHeader;
 use v_types::IndexBuffer;
 use v_types::Mesh;
 use v_types::MeshHeader;
 use v_types::StaticMesh;
-use v_types::Submesh;
-use v_types::SubmeshHeader;
 use v_types::Surface;
 use v_types::VertexBuffer;
 
@@ -102,24 +102,24 @@ fn header_ui(ui: &mut egui::Ui, header: &MeshHeader) {
     });
 }
 
-fn lods_ui(ui: &mut egui::Ui, submeshes: &[Mesh]) {
-    for (i, submesh) in submeshes.iter().enumerate() {
+fn lods_ui(ui: &mut egui::Ui, meshes: &[Mesh]) {
+    for (i, mesh) in meshes.iter().enumerate() {
         CollapsingHeader::new(i.to_string())
             .show(ui, |ui| {
                 ui.scope_builder(UiBuilder::new().id_salt("gpu"), |ui| {
-                    ui.weak("Submeshes (GPU)");
-                    submesh_ui(ui, &submesh.gpu);
+                    ui.weak("Geometry (GPU)");
+                    geom_ui(ui, &mesh.gpu_geometry);
                 });
 
                 ui.separator();
 
                 ui.scope_builder(UiBuilder::new().id_salt("cpu"), |ui| {
-                    ui.weak("Submeshes (CPU)");
-                    let Some(data) = &submesh.cpu else {
+                    ui.weak("Geometry (CPU)");
+                    let Some(data) = &mesh.cpu_geometry else {
                         ui.label("Doesn't exist");
                         return;
                     };
-                    submesh_ui(ui, data);
+                    geom_ui(ui, data);
                 });
             })
             .header_response
@@ -127,8 +127,8 @@ fn lods_ui(ui: &mut egui::Ui, submeshes: &[Mesh]) {
     }
 }
 
-fn submesh_ui(ui: &mut egui::Ui, data: &Submesh) {
-    submesh_header_ui(ui, &data.surface_header);
+fn geom_ui(ui: &mut egui::Ui, data: &Geometry) {
+    geom_header_ui(ui, &data.surface_header);
 
     CollapsingHeader::new("Surfaces")
         .default_open(true)
@@ -151,7 +151,7 @@ fn submesh_ui(ui: &mut egui::Ui, data: &Submesh) {
         .on_disabled_hover_text("Doesn't exist");
 }
 
-fn submesh_header_ui(ui: &mut egui::Ui, header: &SubmeshHeader) {
+fn geom_header_ui(ui: &mut egui::Ui, header: &GeometryHeader) {
     let table_builder = TableBuilder::new(ui)
         .striped(true)
         .vscroll(false)
