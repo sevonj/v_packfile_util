@@ -11,6 +11,7 @@ use egui::CentralPanel;
 use egui::Color32;
 use egui::Frame;
 use egui::Ui;
+use egui_extras::install_image_loaders;
 use rfd::FileDialog;
 use v_types::StaticMesh;
 use v_types::VolitionError;
@@ -137,6 +138,8 @@ impl VModelViewer {
 
 impl App for VModelViewer {
     fn ui(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
+        install_image_loaders(ui.ctx());
+
         self.menu_bar(ui);
         ui.add_space(1.0);
 

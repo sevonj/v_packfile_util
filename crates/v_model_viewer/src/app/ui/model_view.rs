@@ -12,6 +12,7 @@ use egui::ScrollArea;
 use egui::Sense;
 use egui::Ui;
 use egui::UiBuilder;
+use egui::include_image;
 use glam::Mat4;
 use glam::Vec3;
 
@@ -170,66 +171,103 @@ impl ModelView {
                     .frame(Frame::NONE.inner_margin(4.0))
                     .show_separator_line(false)
                     .show_inside(ui, |ui| {
-                        OSD_FRAME.show(ui, |ui| {
-                            ui.horizontal(|ui| {
-                                ComboBox::from_id_salt("lod")
-                                    .selected_text(format!("Lod {}", self.visible_lod))
-                                    .show_ui(ui, |ui| {
-                                        for i in 0..self.num_lods {
-                                            ui.selectable_value(
-                                                &mut self.visible_lod,
-                                                i,
-                                                format!("Lod {i}"),
-                                            );
+                        Panel::left("topleft")
+                            .frame(Frame::NONE)
+                            .show_separator_line(false)
+                            .show_inside(ui, |ui| {
+                                OSD_FRAME.show(ui, |ui| {
+                                    ui.horizontal(|ui| {
+                                        if ui
+                                            .selectable_value(
+                                                &mut self.view_mode,
+                                                ViewMode::SampleText,
+                                                "sample text",
+                                            )
+                                            .clicked()
+                                        {
+                                            self.view_mode = ViewMode::SampleText
+                                        }
+
+                                        if ui
+                                            .selectable_value(
+                                                &mut self.view_mode,
+                                                ViewMode::BottomText,
+                                                "bottom text",
+                                            )
+                                            .clicked()
+                                        {
+                                            self.view_mode = ViewMode::BottomText
                                         }
                                     });
-
-                                ui.separator();
-
-                                if ui
-                                    .selectable_value(
-                                        &mut self.view_mode,
-                                        ViewMode::SampleText,
-                                        "sample text",
-                                    )
-                                    .clicked()
-                                {
-                                    self.view_mode = ViewMode::SampleText
-                                }
-
-                                if ui
-                                    .selectable_value(
-                                        &mut self.view_mode,
-                                        ViewMode::BottomText,
-                                        "bottom text",
-                                    )
-                                    .clicked()
-                                {
-                                    self.view_mode = ViewMode::BottomText
-                                }
-
-                                ui.separator();
-
-                                if ui
-                                    .add(Button::new("BBOX").selected(self.show_bbox))
-                                    .clicked()
-                                {
-                                    self.show_bbox = !self.show_bbox;
-                                }
-
-                                if ui
-                                    .add(Button::new("ORIGIN").selected(self.show_origin))
-                                    .clicked()
-                                {
-                                    self.show_origin = !self.show_origin;
-                                }
-
-                                if ui.add(Button::new("SPIN").selected(self.spin)).clicked() {
-                                    self.spin = !self.spin;
-                                    self.last_touch = now - Duration::from_secs(SPIN_ENABLE_DELAY);
-                                };
+                                });
                             });
-                        });
+
+                        Panel::right("visibility_toggles")
+                            .frame(Frame::NONE)
+                            .show_separator_line(false)
+                            .show_inside(ui, |ui| {
+                                ui.horizontal(|ui| {
+                                    OSD_FRAME.show(ui, |ui| {
+                                        ui.set_height(18.0);
+
+                                        if ui
+                                            .add(
+                                                Button::new(include_image!(
+                                                    "../../../assets/icon_show_bbox.svg"
+                                                ))
+                                                .selected(self.show_bbox),
+                                            )
+                                            .on_hover_text("Bounding Box")
+                                            .clicked()
+                                        {
+                                            self.show_bbox = !self.show_bbox;
+                                        }
+
+                                        if ui
+                                            .add(
+                                                Button::image(include_image!(
+                                                    "../../../assets/icon_show_axis.svg"
+                                                ))
+                                                .selected(self.show_origin),
+                                            )
+                                            .on_hover_text("Axis")
+                                            .clicked()
+                                        {
+                                            self.show_origin = !self.show_origin;
+                                        }
+
+                                        if ui
+                                            .add(
+                                                Button::image(include_image!(
+                                                    "../../../assets/icon_spin.svg"
+                                                ))
+                                                .selected(self.spin),
+                                            )
+                                            .on_hover_text("Spin")
+                                            .clicked()
+                                        {
+                                            self.spin = !self.spin;
+                                            self.last_touch =
+                                                now - Duration::from_secs(SPIN_ENABLE_DELAY);
+                                        };
+                                    });
+
+                                    OSD_FRAME.show(ui, |ui| {
+                                        ComboBox::from_id_salt("lod")
+                                            .selected_text(format!("Lod {}", self.visible_lod))
+                                            .width(32.0)
+                                            .show_ui(ui, |ui| {
+                                                for i in 0..self.num_lods {
+                                                    ui.selectable_value(
+                                                        &mut self.visible_lod,
+                                                        i,
+                                                        format!("Lod {i}"),
+                                                    );
+                                                }
+                                            });
+                                    });
+                                });
+                            });
                     });
 
                 Frame::NONE.inner_margin(4).show(ui, |ui| {
