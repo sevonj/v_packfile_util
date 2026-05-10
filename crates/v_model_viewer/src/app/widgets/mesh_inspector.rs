@@ -105,15 +105,10 @@ fn header_ui(ui: &mut egui::Ui, header: &MeshHeader) {
 fn lods_ui(ui: &mut egui::Ui, submeshes: &[Mesh]) {
     for (i, submesh) in submeshes.iter().enumerate() {
         CollapsingHeader::new(i.to_string())
-            .enabled(submesh.gpu.is_some())
             .show(ui, |ui| {
                 ui.scope_builder(UiBuilder::new().id_salt("gpu"), |ui| {
                     ui.weak("Submeshes (GPU)");
-                    let Some(data) = &submesh.gpu else {
-                        ui.label("Doesn't exist");
-                        return;
-                    };
-                    submesh_ui(ui, data);
+                    submesh_ui(ui, &submesh.gpu);
                 });
 
                 ui.separator();
