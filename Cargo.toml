@@ -2,7 +2,7 @@
 resolver = "2"
 members = [
   "crates/v_commands",
-  "crates/v_model_viewer",
+  "crates/v_modelview",
   "crates/v_packer",
   "crates/v_types",
 ]

@@ -14,7 +14,7 @@ fn main() -> eframe::Result {
         Box::new(|cc| {
             cc.egui_ctx
                 .options_mut(|opt| opt.zoom_with_keyboard = false);
-            Ok(Box::new(v_model_viewer::VModelViewer::new(cc)))
+            Ok(Box::new(v_modelview::VModelViewer::new(cc)))
         }),
     )
 }

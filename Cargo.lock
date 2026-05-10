@@ -3565,7 +3565,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "v_model_viewer"
+name = "v_modelview"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
