@@ -128,6 +128,7 @@ impl StaticMesh {
     }
 
     /// Return: vec<(vbufs, ibuf)>
+    #[allow(clippy::type_complexity)]
     pub fn gpu_buffers<'a>(
         &self,
         buf: &'a [u8],

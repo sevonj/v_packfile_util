@@ -149,7 +149,7 @@ impl CallbackTrait for StaticMeshCallback {
 
             for surf in &sub.surfaces {
                 let vbuf = &sub.vbufs[surf.vbuf as usize];
-                rpass.set_pipeline(&res.cpu_geom_pipelines.get(&surf.material).unwrap());
+                rpass.set_pipeline(res.cpu_geom_pipelines.get(&surf.material).unwrap());
                 rpass.set_vertex_buffer(0, vbuf.slice(..));
                 let indices = surf.start_index..(surf.start_index + surf.num_indices as u32);
                 let base_vertex = surf.start_vertex as i32;
