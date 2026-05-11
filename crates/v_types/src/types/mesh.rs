@@ -2,6 +2,9 @@ use crate::AABB;
 use crate::VolitionError;
 use crate::util::*;
 
+pub const MAX_SURFACES: u16 = 100;
+pub const MAX_LODS: u32 = 100;
+
 /// SRIV
 /// https://www.saintsrowmods.com/forum/threads/crunched-mesh-formats.15962/
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -40,8 +43,6 @@ enum VertexAttributeTypes {
     // Compressed Position Meta Types
     CPosition,
     XCposition,
-
-    Num,
 }
 
 /// 1:1 from disk
@@ -57,15 +58,13 @@ pub struct LodMeshHeader {
 }
 
 impl LodMeshHeader {
-    pub const MAX_LODS: u32 = 100;
-
     pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
         let num_lods = read_u32_le(buf, 0x1c);
-        if num_lods > Self::MAX_LODS {
+        if num_lods > MAX_LODS {
             return Err(VolitionError::ValueTooHigh {
                 field: "MeshHeader::num_lods",
-                max: Self::MAX_LODS as usize,
+                max: MAX_LODS as usize,
                 got: num_lods as usize,
             });
         }
@@ -342,16 +341,14 @@ pub struct MeshHeader {
 }
 
 impl MeshHeader {
-    pub const MAX_SURFACES: u16 = 100;
-
     pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
 
         let num_surfaces = read_u16_le(buf, 0x2);
-        if num_surfaces > Self::MAX_SURFACES {
+        if num_surfaces > MAX_SURFACES {
             return Err(VolitionError::ValueTooHigh {
                 field: "GeometryHeader::num_surfaces",
-                max: Self::MAX_SURFACES as usize,
+                max: MAX_SURFACES as usize,
                 got: num_surfaces as usize,
             });
         }
