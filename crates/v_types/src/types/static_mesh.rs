@@ -89,39 +89,79 @@ impl StaticMesh {
         })
     }
 
-    pub fn dump_wavefront_cpu(&self) -> String {
+    pub fn dump_wavefront(&self, g_smesh: Option<&[u8]>) -> String {
         let mut out = String::new();
+
+        out += "# v_modelview StaticMesh dump\n";
+        if self.mesh_header.has_cpu_geometry() {
+            out += "# INFO: CPU file has geometry.\n";
+        } else {
+            out += "# INFO: CPU file doesn't have geometry.\n";
+        }
+        if g_smesh.is_none() {
+            out += "# WARNING: GPU file not provided. Dumping only CPU file contents.\n";
+        }
+
+        let gpu_buffers = g_smesh.map(|g_smesh| self.gpu_buffers(g_smesh).unwrap());
+
+        if let Some(gpu_buffers) = &gpu_buffers {
+            assert_eq!(gpu_buffers.len(), self.lod_meshes.len());
+        }
 
         let mut next_index = 1;
         for (i, mesh) in self.lod_meshes.iter().enumerate() {
-            let Some(geom) = &mesh.cpu_geometry else {
-                continue;
-            };
-            out += &format!("g lod_{}\n", i);
+            if let Some(gpu_buffers) = &gpu_buffers {
+                let geom = &mesh.gpu_geometry;
 
-            let vbuf = &mesh.cpu_vdata;
-            let mut voff = 0;
-            let mut added_vertices = 0;
-            for vhead in &geom.vertex_headers {
-                assert_eq!(vhead.stride, 12);
-                for _ in 0..vhead.num_vertices {
-                    let v = Vector::from_data(&vbuf[voff..]).unwrap();
-                    out += &format!("v {} {} {}\n", v.x, v.y, v.z);
-                    voff += 12;
+                out += &format!("o lod_{}_gpu\n", i);
+                let (vbufs, ibuf) = &gpu_buffers[i];
+
+                let mut added_vertices = 0;
+                for (vhead, vbuf) in geom.vertex_headers.iter().zip(vbufs) {
+                    let stride = vhead.stride as usize;
+                    for i in 0..vhead.num_vertices as usize {
+                        let v = Vector::from_data(&vbuf[i * stride..]).unwrap();
+                        out += &format!("v {} {} {}\n", v.x, v.y, v.z);
+                    }
+                    added_vertices += vhead.num_vertices as usize;
                 }
-                added_vertices += vhead.num_vertices as usize;
+
+                for i in 0..geom.index_header.num_indices as usize - 2 {
+                    let a = next_index + read_u16_le(ibuf, i * 2) as usize;
+                    let b = next_index + read_u16_le(ibuf, i * 2 + 2) as usize;
+                    let c = next_index + read_u16_le(ibuf, i * 2 + 4) as usize;
+                    out += &format!("f {a} {b} {c}\n");
+                }
+                next_index += added_vertices;
             }
 
-            let ibuf = &mesh.cpu_idata;
-            let mut ioff = 0;
-            for _ in 0..geom.index_header.num_indices - 2 {
-                let a = next_index + read_u16_le(ibuf, ioff) as usize;
-                let b = next_index + read_u16_le(ibuf, ioff + 2) as usize;
-                let c = next_index + read_u16_le(ibuf, ioff + 4) as usize;
-                out += &format!("f {a} {b} {c}\n");
-                ioff += 2;
-            }
-            next_index += added_vertices;
+            if let Some(geom) = &mesh.cpu_geometry {
+                out += &format!("o lod_{}_cpu\n", i);
+
+                let vbuf = &mesh.cpu_vdata;
+                let mut voff = 0;
+                let mut added_vertices = 0;
+                for vhead in &geom.vertex_headers {
+                    assert_eq!(vhead.stride, 12);
+                    for _ in 0..vhead.num_vertices {
+                        let v = Vector::from_data(&vbuf[voff..]).unwrap();
+                        out += &format!("v {} {} {}\n", v.x, v.y, v.z);
+                        voff += 12;
+                    }
+                    added_vertices += vhead.num_vertices as usize;
+                }
+
+                let ibuf = &mesh.cpu_idata;
+                let mut ioff = 0;
+                for _ in 0..geom.index_header.num_indices - 2 {
+                    let a = next_index + read_u16_le(ibuf, ioff) as usize;
+                    let b = next_index + read_u16_le(ibuf, ioff + 2) as usize;
+                    let c = next_index + read_u16_le(ibuf, ioff + 4) as usize;
+                    out += &format!("f {a} {b} {c}\n");
+                    ioff += 2;
+                }
+                next_index += added_vertices;
+            };
         }
 
         out

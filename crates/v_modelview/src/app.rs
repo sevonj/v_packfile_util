@@ -94,7 +94,9 @@ impl VModelViewer {
             return;
         };
 
-        let contents = model_data.smesh.dump_wavefront_cpu();
+        let contents = model_data
+            .smesh
+            .dump_wavefront(model_data.g_smesh.as_deref());
         if !contents.is_empty()
             && let Err(e) = std::fs::write(file_path, contents.as_bytes())
         {
