@@ -5,46 +5,6 @@ use crate::util::*;
 pub const MAX_SURFACES: u16 = 100;
 pub const MAX_LODS: u32 = 100;
 
-/// SRIV
-/// https://www.saintsrowmods.com/forum/threads/crunched-mesh-formats.15962/
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(C)]
-#[allow(dead_code)]
-enum VertexAttributeTypes {
-    Invalid = -1,
-
-    // Floating Point Types
-    Float1 = 0,
-    Float2,
-    Float3,
-    Float4,
-
-    // Half Float Types
-    Half2,
-    Half4,
-
-    // Byte Types
-    UByte4,
-    UByte4N,
-
-    // Short Types
-    Short2N,
-    Short4N,
-    Short2,
-    Short4,
-
-    // Compressed Normal Meta Types
-    CNormal,
-    CTangent,
-
-    // Color Meta Types
-    Color,
-
-    // Compressed Position Meta Types
-    CPosition,
-    XCposition,
-}
-
 /// Deserialized
 #[derive(Debug, Clone)]
 pub struct LodMeshData {
@@ -261,15 +221,6 @@ impl LodMeshHeader {
                 let mut vertex_headers = Vec::with_capacity(num_vertex_buffers);
                 for _ in 0..index_header.num_vertex_buffers {
                     let vertex_header = VertexBuffer::from_data(&buf[*data_offset..])?;
-
-                    if vertex_header.num_uvs != 0 {
-                        return Err(VolitionError::ExpectedExactValue {
-                            field: "VertexBufferHeader::num_uvs (cpu)",
-                            expected: 0,
-                            got: vertex_header.num_uvs as i32,
-                        });
-                    }
-
                     vertex_headers.push(vertex_header);
                     *data_offset += size_of::<VertexBuffer>();
                 }
@@ -493,8 +444,7 @@ impl IndexBuffer {
 #[repr(C)]
 pub struct VertexBuffer {
     /// Probably
-    pub format: u8,
-    pub num_uvs: u8,
+    pub format: i16,
     pub stride: u16,
     pub num_vertices: u32,
     /// Always -1
@@ -526,8 +476,7 @@ impl VertexBuffer {
         }
 
         Ok(Self {
-            format: buf[0],
-            num_uvs: buf[1],
+            format: read_i16_le(buf, 0x0),
             stride: read_u16_le(buf, 0x2),
             num_vertices: read_u32_le(buf, 0x4),
             ptr_render_data,
