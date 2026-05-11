@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use bytemuck::Pod;
 use bytemuck::Zeroable;
 
@@ -15,7 +17,6 @@ pub struct CpuMesh {
     pub vbufs: Vec<wgpu::Buffer>,
     pub ibuf: wgpu::Buffer,
     pub surfaces: Vec<v_types::Surface>,
-    pub base_pipeline_index: usize,
 }
 
 pub const fn cpu_vbuf_layout(
@@ -72,7 +73,7 @@ pub fn cpu_geom_pipelines(
     render_state: &egui_wgpu::RenderState,
     smesh: &v_types::StaticMesh,
     bgl: &wgpu::BindGroupLayout,
-) -> Vec<wgpu::RenderPipeline> {
+) -> HashMap<i16, wgpu::RenderPipeline> {
     let device = &render_state.device;
 
     let shader_cpu = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -86,54 +87,60 @@ pub fn cpu_geom_pipelines(
         immediate_size: 0,
     });
 
-    let mut cpu_pipelines = vec![];
-    for s in smesh.lod_meshes.iter().filter(|s| s.cpu_geometry.is_some()) {
-        let cpu_data = s.cpu_geometry.as_ref().unwrap();
-        for vertex_header in &cpu_data.vertex_headers {
-            let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("static_mesh_cpu_pipeline"),
-                layout: Some(&pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: &shader_cpu,
-                    entry_point: Some("vs_main"),
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
-                    buffers: &[cpu_vbuf_layout(vertex_header)],
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: &shader_cpu,
-                    entry_point: Some("fs_main"),
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: render_state.target_format,
-                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
+    let mut cpu_pipelines: HashMap<i16, wgpu::RenderPipeline> = HashMap::new();
+    for mesh in smesh.lod_meshes.iter().filter(|s| s.cpu_geometry.is_some()) {
+        let cpu_data = mesh.cpu_geometry.as_ref().unwrap();
+
+        for surf in &cpu_data.surfaces {
+            if cpu_pipelines.contains_key(&surf.material) {
+                continue;
+            }
+            let vertex_header = cpu_data.vertex_headers.get(surf.vbuf as usize).unwrap();
+            cpu_pipelines.insert(
+                surf.material,
+                device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some("static_mesh_cpu_pipeline"),
+                    layout: Some(&pipeline_layout),
+                    vertex: wgpu::VertexState {
+                        module: &shader_cpu,
+                        entry_point: Some("vs_main"),
+                        compilation_options: wgpu::PipelineCompilationOptions::default(),
+                        buffers: &[cpu_vbuf_layout(vertex_header)],
+                    },
+                    fragment: Some(wgpu::FragmentState {
+                        module: &shader_cpu,
+                        entry_point: Some("fs_main"),
+                        compilation_options: wgpu::PipelineCompilationOptions::default(),
+                        targets: &[Some(wgpu::ColorTargetState {
+                            format: render_state.target_format,
+                            blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                            write_mask: wgpu::ColorWrites::ALL,
+                        })],
+                    }),
+                    primitive: wgpu::PrimitiveState {
+                        topology: wgpu::PrimitiveTopology::TriangleStrip,
+                        strip_index_format: Some(wgpu::IndexFormat::Uint16),
+                        cull_mode: Some(wgpu::Face::Back),
+                        ..Default::default()
+                    },
+                    depth_stencil: Some(wgpu::DepthStencilState {
+                        format: wgpu::TextureFormat::Depth32Float,
+                        depth_write_enabled: Some(true),
+                        depth_compare: Some(wgpu::CompareFunction::Less),
+                        stencil: wgpu::StencilState::default(),
+                        bias: wgpu::DepthBiasState::default(),
+                    }),
+                    multisample: wgpu::MultisampleState::default(),
+                    multiview_mask: None,
+                    cache: None,
                 }),
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleStrip,
-                    strip_index_format: Some(wgpu::IndexFormat::Uint16),
-                    cull_mode: Some(wgpu::Face::Back),
-                    ..Default::default()
-                },
-                depth_stencil: Some(wgpu::DepthStencilState {
-                    format: wgpu::TextureFormat::Depth32Float,
-                    depth_write_enabled: Some(true),
-                    depth_compare: Some(wgpu::CompareFunction::Less),
-                    stencil: wgpu::StencilState::default(),
-                    bias: wgpu::DepthBiasState::default(),
-                }),
-                multisample: wgpu::MultisampleState::default(),
-                multiview_mask: None,
-                cache: None,
-            });
-            cpu_pipelines.push(pipeline);
+            );
         }
     }
     cpu_pipelines
 }
 
 pub fn cpu_geom_lods(device: &wgpu::Device, smesh: &v_types::StaticMesh) -> Vec<CpuMesh> {
-    let mut base_pipeline_index = 0;
     smesh
         .lod_meshes
         .iter()
@@ -169,9 +176,7 @@ pub fn cpu_geom_lods(device: &wgpu::Device, smesh: &v_types::StaticMesh) -> Vec<
                 vbufs,
                 ibuf,
                 surfaces: cpu_data.surfaces.clone(),
-                base_pipeline_index,
             };
-            base_pipeline_index += cpu_data.vertex_headers.len();
             sub
         })
         .collect()

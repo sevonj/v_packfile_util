@@ -1,6 +1,8 @@
 mod solid;
 mod wireframe;
 
+use std::collections::HashMap;
+
 use egui_wgpu::CallbackResources;
 use egui_wgpu::CallbackTrait;
 use egui_wgpu::RenderState;
@@ -13,7 +15,8 @@ use crate::app::ui::model_view::resources::solid::SolidUniforms;
 pub struct StaticMeshResource {
     solid_uniform_buf: wgpu::Buffer,
     solid_bind_group: wgpu::BindGroup,
-    cpu_geom_pipelines: Vec<wgpu::RenderPipeline>,
+    /// Key: surface material_index
+    cpu_geom_pipelines: HashMap<i16, wgpu::RenderPipeline>,
     cpu_geom_lods: Vec<solid::CpuMesh>,
     wframe_pipeline: wgpu::RenderPipeline,
     bbox_vbuf: wgpu::Buffer,
@@ -27,7 +30,6 @@ impl StaticMeshResource {
         let solid_bgl = solid::solid_bgl(device);
         let solid_uniform_buf = solid::solid_uniform_buf(device);
         let solid_bind_group = solid::solid_bind_group(&solid_uniform_buf, &solid_bgl, device);
-
         let cpu_geom_pipelines = solid::cpu_geom_pipelines(render_state, smesh, &solid_bgl);
         let cpu_geom_lods = solid::cpu_geom_lods(device, smesh);
 
@@ -65,6 +67,7 @@ impl StaticMeshResource {
 pub struct StaticMeshCallback {
     pub view: Mat4,
     pub light: Vec3,
+    pub show_gpu_geom: bool,
     pub show_cpu_geom: bool,
     pub show_bbox: bool,
     pub show_origin: bool,
@@ -104,9 +107,7 @@ impl CallbackTrait for StaticMeshCallback {
 
             for surf in &sub.surfaces {
                 let vbuf = &sub.vbufs[surf.vbuf as usize];
-                rpass.set_pipeline(
-                    &res.cpu_geom_pipelines[sub.base_pipeline_index + surf.vbuf as usize],
-                );
+                rpass.set_pipeline(&res.cpu_geom_pipelines.get(&surf.material).unwrap());
                 rpass.set_vertex_buffer(0, vbuf.slice(..));
                 let indices = surf.start_index..(surf.start_index + surf.num_indices as u32);
                 let base_vertex = surf.start_vertex as i32;
