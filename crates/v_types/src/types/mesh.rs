@@ -4,6 +4,10 @@ use crate::util::*;
 
 pub const MAX_SURFACES: u16 = 100;
 pub const MAX_LODS: u32 = 100;
+pub const MAX_UVS: u8 = 4;
+pub const V_ATTR_FLAG_BONES: u8 = 1;
+pub const V_ATTR_FLAG_NORMAL: u8 = 2;
+pub const V_ATTR_FLAG_UNK: u8 = 4; // maybe morph
 
 /// Deserialized
 #[derive(Debug, Clone)]
@@ -222,11 +226,11 @@ impl LodMeshHeader {
                 for _ in 0..index_header.num_vertex_buffers {
                     let vertex_header = VertexBuffer::from_data(&buf[*data_offset..])?;
 
-                    if vertex_header.num_uvs != 0 {
+                    if vertex_header.num_uv_channels != 0 {
                         return Err(VolitionError::ExpectedExactValue {
                             field: "VertexBufferHeader::num_uvs (cpu)",
                             expected: 0,
-                            got: vertex_header.num_uvs as i32,
+                            got: vertex_header.num_uv_channels as i32,
                         });
                     }
 
@@ -452,8 +456,8 @@ impl IndexBuffer {
 #[derive(Debug, Clone)]
 #[repr(C)]
 pub struct VertexBuffer {
-    pub format: u8,
-    pub num_uvs: u8,
+    pub attributes: u8,
+    pub num_uv_channels: u8,
     pub stride: u16,
     pub num_vertices: u32,
     /// Always -1
@@ -463,8 +467,64 @@ pub struct VertexBuffer {
 }
 
 impl VertexBuffer {
+    pub const fn has_bones(&self) -> bool {
+        self.attributes & V_ATTR_FLAG_BONES != 0
+    }
+
+    pub const fn has_normals(&self) -> bool {
+        self.attributes & V_ATTR_FLAG_NORMAL != 0
+    }
+
+    pub const fn has_unk_attr(&self) -> bool {
+        self.attributes & V_ATTR_FLAG_UNK != 0
+    }
+
+    pub const fn attr_len(attr: u8) -> usize {
+        let mut attr_len = 0;
+        if attr & V_ATTR_FLAG_BONES != 0 {
+            attr_len += 8;
+        }
+        if attr & V_ATTR_FLAG_NORMAL != 0 {
+            attr_len += 4;
+        }
+        if attr & V_ATTR_FLAG_UNK != 0 {
+            attr_len += 8;
+        }
+        attr_len
+    }
+
     pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
+
+        let attributes = buf[0];
+        if attributes > 5 {
+            return Err(VolitionError::UnexpectedValue {
+                desc: "VertexBuffer::attr unknown type",
+                got: attributes as i32,
+            });
+        }
+
+        let num_uv_channels = buf[1];
+
+        if num_uv_channels > MAX_UVS {
+            return Err(VolitionError::UnexpectedValue {
+                desc: "MeshHeader::num_uvs higher than expected",
+                got: num_uv_channels as i32,
+            });
+        }
+
+        let stride = read_u16_le(buf, 0x2);
+
+        let uv_len = (num_uv_channels as usize) * 4;
+        let expected_stride = 12 + Self::attr_len(attributes) + uv_len;
+
+        if stride as usize != expected_stride {
+            return Err(VolitionError::ExpectedExactValue {
+                field: "VertexBuffer::stride (calculated from format)",
+                expected: attributes as i32,
+                got: expected_stride as i32 - stride as i32,
+            });
+        }
 
         let ptr_render_data = read_i32_le(buf, 0x8);
         if ptr_render_data != -1 {
@@ -485,9 +545,9 @@ impl VertexBuffer {
         }
 
         Ok(Self {
-            format: buf[0],
-            num_uvs: buf[1],
-            stride: read_u16_le(buf, 0x2),
+            attributes,
+            num_uv_channels,
+            stride,
             num_vertices: read_u32_le(buf, 0x4),
             ptr_render_data,
             unk_0c,

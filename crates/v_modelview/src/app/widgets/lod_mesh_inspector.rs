@@ -279,10 +279,21 @@ fn vbufs_ui(ui: &mut egui::Ui, vbufs: &[VertexBuffer]) {
 
                 ui.vertical(|ui| {
                     ui.horizontal(|ui| {
-                        ui.label(format!("Vertex Format: {}", vbuf.format));
+                        ui.monospace(format!(
+                            "Vertex Attributes: {}{}{}",
+                            if vbuf.has_bones() { "B" } else { "-" },
+                            if vbuf.has_normals() { "N" } else { "-" },
+                            if vbuf.has_unk_attr() { "?" } else { "-" },
+                        ))
+                        .on_hover_text(format!(
+                            "Bones: {}\nNormals: {}\nUnknown: {}",
+                            vbuf.has_bones(),
+                            vbuf.has_normals(),
+                            vbuf.has_unk_attr()
+                        ));
                     });
                     ui.horizontal(|ui| {
-                        ui.label(format!("UV Channels: {}", vbuf.num_uvs));
+                        ui.label(format!("UV Channels: {}", vbuf.num_uv_channels));
                     });
                     ui.horizontal(|ui| {
                         ui.label(format!("Stride: {}", vbuf.stride));
