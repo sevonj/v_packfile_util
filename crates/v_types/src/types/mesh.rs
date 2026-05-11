@@ -52,8 +52,7 @@ pub struct LodMeshData {
     pub gpu_geometry: Geometry,
     /// Headers for geometry that lives in CPU RAM
     /// Purpose unknown, sometimes not present
-    /// No materials or attributes;
-    /// Always has exactly one vertex buffer?
+    /// Always has exactly one vertex buffer
     /// If exists, number of surfaces matches gpu data
     pub cpu_geometry: Option<Geometry>,
     pub unk_20b: Option<[u8; 20]>,
