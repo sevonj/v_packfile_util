@@ -45,6 +45,26 @@ enum VertexAttributeTypes {
     XCposition,
 }
 
+/// Deserialized
+#[derive(Debug, Clone)]
+pub struct LodMeshData {
+    /// Headers for geometry that lives in VRAM
+    pub gpu_geometry: Geometry,
+    /// Headers for geometry that lives in CPU RAM
+    /// Purpose unknown, sometimes not present
+    /// No materials or attributes;
+    /// Always has exactly one vertex buffer?
+    /// If exists, number of surfaces matches gpu data
+    pub cpu_geometry: Option<Geometry>,
+    pub unk_20b: Option<[u8; 20]>,
+    /// CPU vertex buffer in raw bytes. Empty if `cpu` == `None`
+    /// Format is always 3xf32 coords only
+    pub cpu_vdata: Vec<u8>,
+    /// CPU index buffer in raw bytes. Empty if `cpu` == `None`
+    /// Format is always u16 tri-strip
+    pub cpu_idata: Vec<u8>,
+}
+
 /// 1:1 from disk
 /// Model with multiple lods
 #[derive(Debug, Clone)]
@@ -296,25 +316,6 @@ impl LodMeshHeader {
         }
         Ok(meshes)
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct LodMeshData {
-    /// Headers for geometry that lives in VRAM
-    pub gpu_geometry: Geometry,
-    /// Headers for geometry that lives in CPU RAM
-    /// Purpose unknown, sometimes not present
-    /// No materials or attributes;
-    /// Always has exactly one vertex buffer?
-    /// If exists, number of surfaces matches gpu data
-    pub cpu_geometry: Option<Geometry>,
-    pub unk_20b: Option<[u8; 20]>,
-    /// CPU vertex buffer in raw bytes. Empty if `cpu` == `None`
-    /// Format is always 3xf32 coords only
-    pub cpu_vdata: Vec<u8>,
-    /// CPU index buffer in raw bytes. Empty if `cpu` == `None`
-    /// Format is always u16 tri-strip
-    pub cpu_idata: Vec<u8>,
 }
 
 /// Deserialized
