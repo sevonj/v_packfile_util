@@ -31,8 +31,17 @@ const INSPECTOR_W: f32 = 300.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ViewMode {
-    SampleText,
-    BottomText,
+    Gpu,
+    Cpu,
+}
+
+impl std::fmt::Display for ViewMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ViewMode::Gpu => write!(f, "GPU"),
+            ViewMode::Cpu => write!(f, "CPU"),
+        }
+    }
 }
 
 pub struct ModelView {
@@ -51,8 +60,8 @@ pub struct ModelView {
 }
 
 impl ModelView {
-    pub fn new(render_state: &RenderState, smesh: &StaticMesh) -> Self {
-        let resources = StaticMeshResource::new(render_state, smesh);
+    pub fn new(render_state: &RenderState, smesh: &StaticMesh, g_smesh: Option<&[u8]>) -> Self {
+        let resources = StaticMeshResource::new(render_state, smesh, g_smesh);
 
         render_state
             .renderer
@@ -75,7 +84,7 @@ impl ModelView {
             camera_pos,
             last_instant: Instant::now(),
             last_touch: Instant::now() - Duration::from_secs(SPIN_ENABLE_DELAY),
-            view_mode: ViewMode::SampleText,
+            view_mode: ViewMode::Gpu,
             show_bbox: true,
             show_origin: false,
             visible_lod: 0,
@@ -87,7 +96,6 @@ impl ModelView {
         let rect = ui.available_rect_before_wrap();
 
         // paint
-
         let view_off_px = -(rect.width() - (rect.width() - INSPECTOR_W)) / 2.0;
         let view_off_n = view_off_px / (rect.width() / 2.0);
         let view_off_xf = Mat4::from_translation(Vec3::new(view_off_n, 0.0, 0.0));
@@ -110,23 +118,19 @@ impl ModelView {
         let model = Mat4::from_rotation_y(self.angle_y);
         let light = Vec3::new(1.0, -1.0, 1.0);
 
-        match self.view_mode {
-            ViewMode::SampleText => {
-                if model_data.smesh.mesh_header.has_cpu_geometry() {
-                    ui.painter().add(egui_wgpu::Callback::new_paint_callback(
-                        rect,
-                        StaticMeshCallback {
-                            view: proj * view * model,
-                            light,
-                            show_cpu_geom: true,
-                            show_bbox: self.show_bbox,
-                            show_origin: self.show_origin,
-                            visible_lod: self.visible_lod,
-                        },
-                    ));
-                }
-            }
-            ViewMode::BottomText => (),
+        if model_data.smesh.mesh_header.has_cpu_geometry() {
+            ui.painter().add(egui_wgpu::Callback::new_paint_callback(
+                rect,
+                StaticMeshCallback {
+                    view: proj * view * model,
+                    light,
+                    show_gpu_geom: self.view_mode == ViewMode::Gpu,
+                    show_cpu_geom: self.view_mode == ViewMode::Cpu,
+                    show_bbox: self.show_bbox,
+                    show_origin: self.show_origin,
+                    visible_lod: self.visible_lod,
+                },
+            ));
         }
 
         let now = Instant::now();
@@ -176,31 +180,15 @@ impl ModelView {
                             .frame(Frame::NONE)
                             .show_separator_line(false)
                             .show_inside(ui, |ui| {
-                                OSD_FRAME.show(ui, |ui| {
-                                    ui.horizontal(|ui| {
-                                        if ui
-                                            .selectable_value(
-                                                &mut self.view_mode,
-                                                ViewMode::SampleText,
-                                                "sample text",
-                                            )
-                                            .clicked()
-                                        {
-                                            self.view_mode = ViewMode::SampleText
-                                        }
-
-                                        if ui
-                                            .selectable_value(
-                                                &mut self.view_mode,
-                                                ViewMode::BottomText,
-                                                "bottom text",
-                                            )
-                                            .clicked()
-                                        {
-                                            self.view_mode = ViewMode::BottomText
-                                        }
-                                    });
-                                });
+                                ui.monospace(format!(
+                                    "lods: {}",
+                                    model_data.smesh.lod_meshes.len()
+                                ));
+                                ui.monospace(format!(
+                                    "materials: {}",
+                                    model_data.smesh.matlib.materials.len()
+                                ));
+                                ui.monospace(format!("zoom: {}", self.zoom));
                             });
 
                         Panel::right("visibility_toggles")
@@ -285,7 +273,7 @@ impl ModelView {
                                     OSD_FRAME.show(ui, |ui| {
                                         ComboBox::from_id_salt("lod")
                                             .selected_text(format!("Lod {}", self.visible_lod))
-                                            .width(32.0)
+                                            .width(48.0)
                                             .show_ui(ui, |ui| {
                                                 for i in 0..self.num_lods {
                                                     ui.selectable_value(
@@ -295,31 +283,43 @@ impl ModelView {
                                                     );
                                                 }
                                             });
+
+                                        ComboBox::from_id_salt("gpu/cpu")
+                                            .selected_text(self.view_mode.to_string())
+                                            .width(36.0)
+                                            .show_ui(ui, |ui| {
+                                                ui.selectable_value(
+                                                    &mut self.view_mode,
+                                                    ViewMode::Cpu,
+                                                    ViewMode::Cpu.to_string(),
+                                                );
+                                                ui.selectable_value(
+                                                    &mut self.view_mode,
+                                                    ViewMode::Gpu,
+                                                    ViewMode::Gpu.to_string(),
+                                                );
+                                            });
                                     });
                                 });
                             });
                     });
 
-                Frame::NONE.inner_margin(4).show(ui, |ui| {
-                    ui.monospace(format!("{} lods", model_data.smesh.lod_meshes.len()));
-                    ui.monospace(format!(
-                        "{} materials",
-                        model_data.smesh.matlib.materials.len()
-                    ));
-                    ui.monospace(format!("zoom: {}", self.zoom));
-                });
-
                 match self.view_mode {
-                    ViewMode::SampleText => {
+                    ViewMode::Gpu => {
+                        if model_data.g_smesh.is_none() {
+                            ui.add(StatusPage::new(
+                                "Couldn't Load GPU File",
+                                "Make sure it's in the same directory and named identically",
+                            ));
+                        }
+                    }
+                    ViewMode::Cpu => {
                         if !model_data.smesh.mesh_header.has_cpu_geometry() {
                             ui.add(StatusPage::new(
                                 "Model Has No CPU Geometry",
                                 "Nothing to show",
                             ));
                         }
-                    }
-                    ViewMode::BottomText => {
-                        ui.add(StatusPage::new("Not implemented", "Not implemented"));
                     }
                 }
             })

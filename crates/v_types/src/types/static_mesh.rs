@@ -126,6 +126,32 @@ impl StaticMesh {
 
         out
     }
+
+    /// Return: vec<(vbufs, ibuf)>
+    pub fn gpu_buffers<'a>(
+        &self,
+        buf: &'a [u8],
+    ) -> Result<Vec<(Vec<&'a [u8]>, &'a [u8])>, VolitionError> {
+        let mut offset = 0;
+        let mut datas = vec![];
+        for lod_mesh in &self.lod_meshes {
+            align(&mut offset, 16);
+            let mut vbufs = vec![];
+            for vertex_head in &lod_mesh.gpu_geometry.vertex_headers {
+                let len = vertex_head.num_vertices as usize * vertex_head.stride as usize;
+                let end = offset + len;
+                vbufs.push(&buf[offset..end]);
+                offset += len;
+            }
+
+            align(&mut offset, 16);
+            let len = lod_mesh.gpu_geometry.index_header.num_indices as usize * 2;
+            let end = offset + len;
+            datas.push((vbufs, &buf[offset..end]));
+            offset += len;
+        }
+        Ok(datas)
+    }
 }
 
 /// 1:1 from disk

@@ -415,7 +415,7 @@ pub struct Surface {
     /// First vertex
     pub start_vertex: u32,
     pub num_indices: u16,
-    pub material: i16,
+    pub material: u16,
 }
 
 impl Surface {
@@ -426,7 +426,7 @@ impl Surface {
             start_index: read_u32_le(buf, 0x4),
             start_vertex: read_u32_le(buf, 0x8),
             num_indices: read_u16_le(buf, 0xc),
-            material: read_i16_le(buf, 0xe),
+            material: read_u16_le(buf, 0xe),
         })
     }
 }

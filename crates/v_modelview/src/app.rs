@@ -18,7 +18,18 @@ use v_types::VolitionError;
 
 pub struct ModelData {
     pub smesh: StaticMesh,
+    pub g_smesh: Option<Vec<u8>>,
     pub file_path: PathBuf,
+}
+
+impl ModelData {
+    pub fn try_load_g_smesh(&mut self) {
+        let Some(cpu_ext) = self.file_path.extension().and_then(|e| e.to_str()) else {
+            return;
+        };
+        let file_path = self.file_path.with_extension(format!("g_{cpu_ext}"));
+        self.g_smesh = std::fs::read(file_path).ok();
+    }
 }
 
 use crate::app::ui::ModelView;
@@ -112,8 +123,13 @@ impl VModelViewer {
                 return Err(e);
             }
         };
-
-        self.model_data = Some(ModelData { smesh, file_path });
+        let mut model_data = ModelData {
+            smesh,
+            g_smesh: None,
+            file_path,
+        };
+        model_data.try_load_g_smesh();
+        self.model_data = Some(model_data);
         Ok(())
     }
 
@@ -152,7 +168,11 @@ impl App for VModelViewer {
                         if self.model_view.is_none()
                             && let Some(render_state) = frame.wgpu_render_state()
                         {
-                            self.model_view = Some(ModelView::new(render_state, &model_data.smesh));
+                            self.model_view = Some(ModelView::new(
+                                render_state,
+                                &model_data.smesh,
+                                model_data.g_smesh.as_deref(),
+                            ));
 
                             // Clear state on model change. Otherwise old collapsingheader states, etc. will affect the new ui
                             ui.data_mut(|w| w.clear());
