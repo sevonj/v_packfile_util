@@ -53,7 +53,7 @@ pub fn wframe_pipeline(render_state: &egui_wgpu::RenderState) -> wgpu::RenderPip
         },
         fragment: Some(wgpu::FragmentState {
             module: &wframe_shader,
-            entry_point: Some("fs_wireframe"),
+            entry_point: Some("fs_main"),
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             targets: &[Some(wgpu::ColorTargetState {
                 format: render_state.target_format,
