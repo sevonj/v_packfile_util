@@ -221,6 +221,15 @@ impl LodMeshHeader {
                 let mut vertex_headers = Vec::with_capacity(num_vertex_buffers);
                 for _ in 0..index_header.num_vertex_buffers {
                     let vertex_header = VertexBuffer::from_data(&buf[*data_offset..])?;
+
+                    if vertex_header.num_uvs != 0 {
+                        return Err(VolitionError::ExpectedExactValue {
+                            field: "VertexBufferHeader::num_uvs (cpu)",
+                            expected: 0,
+                            got: vertex_header.num_uvs as i32,
+                        });
+                    }
+
                     vertex_headers.push(vertex_header);
                     *data_offset += size_of::<VertexBuffer>();
                 }
@@ -443,8 +452,8 @@ impl IndexBuffer {
 #[derive(Debug, Clone)]
 #[repr(C)]
 pub struct VertexBuffer {
-    /// Probably
-    pub format: i16,
+    pub format: u8,
+    pub num_uvs: u8,
     pub stride: u16,
     pub num_vertices: u32,
     /// Always -1
@@ -476,7 +485,8 @@ impl VertexBuffer {
         }
 
         Ok(Self {
-            format: read_i16_le(buf, 0x0),
+            format: buf[0],
+            num_uvs: buf[1],
             stride: read_u16_le(buf, 0x2),
             num_vertices: read_u32_le(buf, 0x4),
             ptr_render_data,
