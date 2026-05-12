@@ -23,6 +23,7 @@ pub struct StaticMesh {
     pub bone_indices: Vec<i32>,
     pub matlib: MaterialsData,
     pub mesh_header: LodMeshHeader,
+    pub unk_20b: Option<[u8; 20]>,
     pub lod_meshes: Vec<LodMeshData>,
 }
 
@@ -76,7 +77,15 @@ impl StaticMesh {
         let mesh_header = LodMeshHeader::from_le_bytes(&buf[*data_offset..])?;
         *data_offset += size_of::<LodMeshHeader>();
 
-        let lod_meshes = mesh_header.read_data(buf, data_offset, header.unk_2c)?;
+        let unk_20b = if header.unk_2c != 0 {
+            let u = read_bytes(&buf, *data_offset);
+            *data_offset += 20;
+            Some(u)
+        } else {
+            None
+        };
+
+        let lod_meshes = mesh_header.read_data(buf, data_offset)?;
 
         Ok(Self {
             header,
@@ -86,6 +95,7 @@ impl StaticMesh {
             bone_indices,
             matlib,
             mesh_header,
+            unk_20b,
             lod_meshes,
         })
     }
@@ -302,6 +312,14 @@ impl StaticMeshHeader {
             });
         }
 
+        let unk_2c = read_i32_le(buf, 0x2c);
+        if ![0, 2].contains(&unk_2c) {
+            return Err(VolitionError::UnexpectedValue {
+                desc: "StaticMesh::unk_2c expected 0 or 2",
+                got: unk_2c,
+            });
+        }
+
         Ok(Self {
             magic,
             version,
@@ -314,7 +332,7 @@ impl StaticMeshHeader {
             bounding_radius: read_f32_le(buf, 0x20),
             num_bones,
             unk_28: read_i32_le(buf, 0x28),
-            unk_2c: read_i32_le(buf, 0x2c),
+            unk_2c,
         })
     }
 }

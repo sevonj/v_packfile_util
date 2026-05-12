@@ -20,7 +20,6 @@ pub struct LodMeshData {
     /// Never has UV channels. Only possible extra attribute is bones.
     /// If exists, number of surfaces matches gpu data
     pub cpu_geometry: Option<Mesh>,
-    pub unk_20b: Option<[u8; 20]>,
     /// CPU vertex buffer in raw bytes. Empty if `cpu` == `None`
     /// Format is always 3xf32 coords only
     pub cpu_vdata: Vec<u8>,
@@ -104,23 +103,12 @@ impl LodMeshHeader {
         &self,
         buf: &[u8],
         data_offset: &mut usize,
-        unk_2c: i32,
     ) -> Result<Vec<LodMeshData>, VolitionError> {
-        let num_lods = self.num_lods as usize;
-
-        let unk_20b = if unk_2c != 0 {
-            let u = read_bytes(buf, *data_offset);
-            *data_offset += 20;
-            Some(u)
-        } else {
-            None
-        };
-
         align(data_offset, 16);
 
-        let mut meshes: Vec<LodMeshData> = Vec::with_capacity(num_lods);
-
         let num_lods = self.num_lods as usize;
+
+        let mut meshes: Vec<LodMeshData> = Vec::with_capacity(num_lods);
 
         let mut gpu_headers = Vec::with_capacity(num_lods);
         for _ in 0..num_lods {
@@ -297,7 +285,6 @@ impl LodMeshHeader {
             meshes.push(LodMeshData {
                 gpu_geometry: gpu,
                 cpu_geometry: cpu,
-                unk_20b,
                 cpu_vdata,
                 cpu_idata,
             });
