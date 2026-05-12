@@ -2,6 +2,7 @@ use crate::LodMeshData;
 use crate::LodMeshHeader;
 use crate::MaterialsData;
 use crate::Quaternion;
+use crate::Surface;
 use crate::Vector;
 use crate::VolitionError;
 use crate::util::*;
@@ -89,7 +90,7 @@ impl StaticMesh {
         })
     }
 
-    pub fn dump_wavefront(&self, g_smesh: Option<&[u8]>) -> String {
+    pub fn dump_wavefront(&self, g_smesh: Option<&[u8]>, separate_surfaces: bool) -> String {
         let mut out = String::new();
 
         out += "# v_modelview StaticMesh dump\n";
@@ -98,70 +99,109 @@ impl StaticMesh {
         } else {
             out += "# INFO: CPU file doesn't have geometry.\n";
         }
+        if separate_surfaces {
+            out += "# INFO: separate_surfaces enabled. Every surface is a separate object.\n";
+        }
         if g_smesh.is_none() {
             out += "# WARNING: GPU file not provided. Dumping only CPU file contents.\n";
         }
 
-        let gpu_buffers = g_smesh.map(|g_smesh| self.gpu_buffers(g_smesh).unwrap());
+        fn write_vertices(out: &mut String, vhead: &super::VertexBuffer, vbuf: &[u8]) {
+            let stride = vhead.stride as usize;
+            for i in 0..vhead.num_vertices as usize {
+                let v_off = i * stride;
+                let pos = Vector::from_data(&vbuf[v_off..]).unwrap();
+                let (u, v) = if vhead.num_uv_channels > 0 {
+                    let uv_offset = v_off + vhead.off_uv();
+                    (
+                        read_i16_le(vbuf, uv_offset) as f32 / 1024.0,
+                        read_i16_le(vbuf, uv_offset + 2) as f32 / 1024.0,
+                    )
+                } else {
+                    (0.0, 0.0)
+                };
+                let normal_offset = v_off + vhead.off_normal();
+                let (nx, ny, nz) = if vhead.has_normals() {
+                    (
+                        vbuf[normal_offset] as f32 / 128.0 - 0.5,
+                        vbuf[normal_offset + 1] as f32 / 128.0 - 0.5,
+                        vbuf[normal_offset + 2] as f32 / 128.0 - 0.5,
+                    )
+                } else {
+                    (0.0, 0.0, 0.0)
+                };
+                *out += &format!("v {} {} {}\n", pos.x, pos.y, pos.z);
+                *out += &format!("vt {u} {v}\n");
+                *out += &format!("vn {nx} {ny} {nz}\n");
+            }
+        }
 
+        fn write_indices(out: &mut String, base_index: usize, surf: &Surface, ibuf: &[u8]) {
+            let start = surf.start_index as usize;
+            let end = start + surf.num_indices as usize;
+
+            for i in start..end - 2 {
+                let a = base_index + read_u16_le(ibuf, i * 2) as usize;
+                let b = base_index + read_u16_le(ibuf, i * 2 + 2) as usize;
+                let c = base_index + read_u16_le(ibuf, i * 2 + 4) as usize;
+                if (i - start).is_multiple_of(2) {
+                    *out += &format!("f {a}/{a}/{a} {b}/{b}/{b} {c}/{c}/{c}\n");
+                } else {
+                    *out += &format!("f {a}/{a}/{a} {c}/{c}/{c} {b}/{b}/{b}\n");
+                }
+            }
+        }
+
+        let gpu_buffers = g_smesh.map(|g_smesh| self.gpu_buffers(g_smesh).unwrap());
         if let Some(gpu_buffers) = &gpu_buffers {
             assert_eq!(gpu_buffers.len(), self.lod_meshes.len());
         }
 
-        let mut next_index = 1;
-        for (i, mesh) in self.lod_meshes.iter().enumerate() {
+        let mut base_index = 1;
+        for (lod, mesh) in self.lod_meshes.iter().enumerate() {
             if let Some(gpu_buffers) = &gpu_buffers {
+                let (vbufs, ibuf) = &gpu_buffers[lod];
                 let geom = &mesh.gpu_geometry;
 
-                out += &format!("o lod_{}_gpu\n", i);
-                let (vbufs, ibuf) = &gpu_buffers[i];
+                if !separate_surfaces {
+                    out += &format!("o lod{lod}_gpu\n");
+                }
 
-                let mut added_vertices = 0;
-                for (vhead, vbuf) in geom.vertex_headers.iter().zip(vbufs) {
-                    let stride = vhead.stride as usize;
-                    for i in 0..vhead.num_vertices as usize {
-                        let v = Vector::from_data(&vbuf[i * stride..]).unwrap();
-                        out += &format!("v {} {} {}\n", v.x, v.y, v.z);
+                for (i, surf) in geom.surfaces.iter().enumerate() {
+                    if separate_surfaces {
+                        out += &format!("o lod{lod}_gpu_surf{i}\n");
                     }
-                    added_vertices += vhead.num_vertices as usize;
-                }
+                    let mat_name = self.matlib.materials[surf.material as usize].material_hash;
+                    out += &format!("usemtl mat_{mat_name:08X}\n");
 
-                for i in 0..geom.index_header.num_indices as usize - 2 {
-                    let a = next_index + read_u16_le(ibuf, i * 2) as usize;
-                    let b = next_index + read_u16_le(ibuf, i * 2 + 2) as usize;
-                    let c = next_index + read_u16_le(ibuf, i * 2 + 4) as usize;
-                    out += &format!("f {a} {b} {c}\n");
+                    let vhead = &geom.vertex_headers[surf.vbuf as usize];
+                    let vbuf = vbufs[surf.vbuf as usize];
+                    write_vertices(&mut out, vhead, vbuf);
+                    write_indices(&mut out, base_index, surf, ibuf);
+                    base_index += vhead.num_vertices as usize;
                 }
-                next_index += added_vertices;
             }
 
             if let Some(geom) = &mesh.cpu_geometry {
-                out += &format!("o lod_{}_cpu\n", i);
+                if !separate_surfaces {
+                    out += &format!("o lod{lod}_cpu\n");
+                }
 
                 let vbuf = &mesh.cpu_vdata;
-                let mut voff = 0;
-                let mut added_vertices = 0;
-                for vhead in &geom.vertex_headers {
-                    assert_eq!(vhead.stride, 12);
-                    for _ in 0..vhead.num_vertices {
-                        let v = Vector::from_data(&vbuf[voff..]).unwrap();
-                        out += &format!("v {} {} {}\n", v.x, v.y, v.z);
-                        voff += 12;
-                    }
-                    added_vertices += vhead.num_vertices as usize;
-                }
-
                 let ibuf = &mesh.cpu_idata;
-                let mut ioff = 0;
-                for _ in 0..geom.index_header.num_indices - 2 {
-                    let a = next_index + read_u16_le(ibuf, ioff) as usize;
-                    let b = next_index + read_u16_le(ibuf, ioff + 2) as usize;
-                    let c = next_index + read_u16_le(ibuf, ioff + 4) as usize;
-                    out += &format!("f {a} {b} {c}\n");
-                    ioff += 2;
+                for (i, surf) in geom.surfaces.iter().enumerate() {
+                    if separate_surfaces {
+                        out += &format!("o lod{lod}_cpu_surf{i}\n");
+                    }
+                    let mat_name = self.matlib.materials[surf.material as usize].material_hash;
+                    out += &format!("usemtl mat_{mat_name:08X}\n");
+
+                    let vhead = &geom.vertex_headers[surf.vbuf as usize];
+                    write_vertices(&mut out, vhead, vbuf);
+                    write_indices(&mut out, base_index, surf, ibuf);
+                    base_index += vhead.num_vertices as usize;
                 }
-                next_index += added_vertices;
-            };
+            }
         }
 
         out

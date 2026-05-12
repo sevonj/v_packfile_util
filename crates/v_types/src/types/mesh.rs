@@ -479,18 +479,26 @@ impl VertexBuffer {
         self.attributes & V_ATTR_FLAG_UNK != 0
     }
 
-    pub const fn attr_len(attr: u8) -> usize {
-        let mut attr_len = 0;
-        if attr & V_ATTR_FLAG_BONES != 0 {
-            attr_len += 8;
-        }
-        if attr & V_ATTR_FLAG_NORMAL != 0 {
-            attr_len += 4;
-        }
-        if attr & V_ATTR_FLAG_UNK != 0 {
-            attr_len += 8;
-        }
-        attr_len
+    pub const fn off_normal(&self) -> usize {
+        if self.has_bones() { 12 + 8 } else { 12 }
+    }
+
+    pub const fn off_uv(&self) -> usize {
+        let mut off = 12;
+        if self.has_bones() {
+            off += 8
+        };
+        if self.has_normals() {
+            off += 4
+        };
+        if self.has_unk_attr() {
+            off += 8
+        };
+        off
+    }
+
+    pub const fn attr_len(&self) -> usize {
+        vertex_attr_len(self.attributes)
     }
 
     pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
@@ -516,7 +524,7 @@ impl VertexBuffer {
         let stride = read_u16_le(buf, 0x2);
 
         let uv_len = (num_uv_channels as usize) * 4;
-        let expected_stride = 12 + Self::attr_len(attributes) + uv_len;
+        let expected_stride = 12 + vertex_attr_len(attributes) + uv_len;
 
         if stride as usize != expected_stride {
             return Err(VolitionError::ExpectedExactValue {
@@ -553,4 +561,18 @@ impl VertexBuffer {
             unk_0c,
         })
     }
+}
+
+const fn vertex_attr_len(attr: u8) -> usize {
+    let mut attr_len = 0;
+    if attr & V_ATTR_FLAG_BONES != 0 {
+        attr_len += 8;
+    }
+    if attr & V_ATTR_FLAG_NORMAL != 0 {
+        attr_len += 4;
+    }
+    if attr & V_ATTR_FLAG_UNK != 0 {
+        attr_len += 8;
+    }
+    attr_len
 }

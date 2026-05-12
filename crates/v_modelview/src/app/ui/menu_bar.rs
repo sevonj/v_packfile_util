@@ -67,7 +67,18 @@ impl VModelViewer {
                 .add_enabled(has_cpu_geom, Button::new("Export Wavefront (very lossy)"))
                 .clicked()
             {
-                self.prompt_dump_cpu();
+                self.prompt_dump_cpu(false);
+            }
+
+            if ui
+                .add_enabled(
+                    has_cpu_geom,
+                    Button::new("Export Wavefront Separate (very lossy)"),
+                )
+                .on_hover_text("Export each surface as a separate object.")
+                .clicked()
+            {
+                self.prompt_dump_cpu(true);
             }
         });
     }

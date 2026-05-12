@@ -74,7 +74,7 @@ impl VModelViewer {
         self.try_open_model(file_path);
     }
 
-    fn prompt_dump_cpu(&mut self) {
+    fn prompt_dump_cpu(&mut self, separate_surfaces: bool) {
         let Some(model_data) = &self.model_data else {
             return;
         };
@@ -96,7 +96,7 @@ impl VModelViewer {
 
         let contents = model_data
             .smesh
-            .dump_wavefront(model_data.g_smesh.as_deref());
+            .dump_wavefront(model_data.g_smesh.as_deref(), separate_surfaces);
         if !contents.is_empty()
             && let Err(e) = std::fs::write(file_path, contents.as_bytes())
         {
