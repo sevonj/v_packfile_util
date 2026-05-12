@@ -3,9 +3,12 @@ struct Uniforms {
     light_dir: vec3<f32>,
     _pad: f32,
 }
+
 @group(0) @binding(0) var<uniform> u: Uniforms;
 
-struct VIn  { @location(0) pos: vec3<f32> }
+struct VIn  {
+    @location(0) pos: vec3<f32>,
+}
 struct VOut {
     @builtin(position) clip: vec4<f32>,
     @location(0) world_pos: vec3<f32>,

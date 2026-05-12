@@ -15,6 +15,7 @@ use crate::app::ui::model_view::resources::solid::SolidUniforms;
 
 pub struct StaticMeshResource {
     // Beautiful stuff
+    tex_uvcheck_bind_group: wgpu::BindGroup,
     gpu_geom_pipelines: HashMap<u16, wgpu::RenderPipeline>,
     gpu_geom_lods: Vec<beautiful::GpuMesh>,
 
@@ -38,11 +39,16 @@ impl StaticMeshResource {
     ) -> Self {
         let device = &render_state.device;
 
-        let solid_bgl = solid::solid_bgl(device);
+        let common_bgl = solid::solid_bgl(device);
+
+        let tex_bgl = beautiful::texture_bgl(device);
+        let tex_uvcheck_bind_group =
+            beautiful::load_tex_uvcheck(device, &render_state.queue, &tex_bgl);
 
         let (gpu_geom_pipelines, gpu_geom_lods) = if let Some(g_smesh) = g_smesh {
             let gpu_buffers = smesh.gpu_buffers(g_smesh).unwrap();
-            let pipelines = beautiful::gpu_geom_pipelines(render_state, smesh, &solid_bgl);
+            let pipelines =
+                beautiful::gpu_geom_pipelines(render_state, smesh, &common_bgl, &tex_bgl);
             let lods = beautiful::gpu_geom_lods(device, smesh, &gpu_buffers);
             (pipelines, lods)
         } else {
@@ -50,8 +56,8 @@ impl StaticMeshResource {
         };
 
         let solid_uniform_buf: wgpu::Buffer = solid::solid_uniform_buf(device);
-        let solid_bind_group = solid::solid_bind_group(&solid_uniform_buf, &solid_bgl, device);
-        let cpu_geom_pipelines = solid::cpu_geom_pipelines(render_state, smesh, &solid_bgl);
+        let solid_bind_group = solid::solid_bind_group(&solid_uniform_buf, &common_bgl, device);
+        let cpu_geom_pipelines = solid::cpu_geom_pipelines(render_state, smesh, &common_bgl);
         let cpu_geom_lods = solid::cpu_geom_lods(device, smesh);
 
         let wframe_pipeline = wireframe::wframe_pipeline(render_state);
@@ -59,6 +65,7 @@ impl StaticMeshResource {
         let axis_vbuf = wireframe::axis_vbuf(device);
 
         Self {
+            tex_uvcheck_bind_group,
             gpu_geom_pipelines,
             gpu_geom_lods,
             solid_uniform_buf,
@@ -126,6 +133,7 @@ impl CallbackTrait for StaticMeshCallback {
             && let Some(lod) = res.gpu_geom_lods.get(self.visible_lod)
         {
             rpass.set_bind_group(0, &res.solid_bind_group, &[]);
+            rpass.set_bind_group(1, &res.tex_uvcheck_bind_group, &[]);
             rpass.set_index_buffer(lod.ibuf.slice(..), wgpu::IndexFormat::Uint16);
 
             for surf in &lod.surfaces {
