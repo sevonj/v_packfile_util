@@ -13,13 +13,13 @@ pub const V_ATTR_FLAG_UNK: u8 = 4; // maybe morph
 #[derive(Debug, Clone)]
 pub struct LodMeshData {
     /// Headers for geometry that lives in VRAM
-    pub gpu_geometry: Geometry,
+    pub gpu_geometry: Mesh,
     /// Headers for geometry that lives in CPU RAM
     /// Purpose unknown, sometimes not present
     /// Always has exactly one vertex buffer
     /// Never has UV channels. Only possible extra attribute is bones.
     /// If exists, number of surfaces matches gpu data
-    pub cpu_geometry: Option<Geometry>,
+    pub cpu_geometry: Option<Mesh>,
     pub unk_20b: Option<[u8; 20]>,
     /// CPU vertex buffer in raw bytes. Empty if `cpu` == `None`
     /// Format is always 3xf32 coords only
@@ -42,7 +42,7 @@ pub struct LodMeshHeader {
 }
 
 impl LodMeshHeader {
-    pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
+    pub fn from_le_bytes(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
         let num_lods = read_u32_le(buf, 0x1c);
         if num_lods > MAX_LODS {
@@ -78,12 +78,22 @@ impl LodMeshHeader {
         }
 
         Ok(Self {
-            bbox: AABB::from_data(buf)?,
+            bbox: AABB::from_le_bytes(buf)?,
             flags: read_i32_le(buf, 0x18),
             num_lods,
             ptr_gpu,
             ptr_cpu,
         })
+    }
+
+    pub fn to_le_bytes(&self) -> [u8; size_of::<Self>()] {
+        let mut bytes = [0; size_of::<Self>()];
+        bytes[0x00..0x18].copy_from_slice(&self.bbox.to_le_bytes());
+        bytes[0x18..0x1c].copy_from_slice(&self.flags.to_le_bytes());
+        bytes[0x1c..0x20].copy_from_slice(&self.num_lods.to_le_bytes());
+        bytes[0x20..0x24].copy_from_slice(&self.ptr_gpu.to_le_bytes());
+        bytes[0x24..0x28].copy_from_slice(&self.ptr_cpu.to_le_bytes());
+        bytes
     }
 
     pub const fn has_cpu_geometry(&self) -> bool {
@@ -114,14 +124,14 @@ impl LodMeshHeader {
 
         let mut gpu_headers = Vec::with_capacity(num_lods);
         for _ in 0..num_lods {
-            gpu_headers.push(MeshHeader::from_data(&buf[*data_offset..])?);
+            gpu_headers.push(MeshHeader::from_le_bytes(&buf[*data_offset..])?);
             *data_offset += size_of::<MeshHeader>();
         }
 
         let cpu_headers = if self.has_cpu_geometry() {
             let mut headers = Vec::with_capacity(num_lods);
             for _ in 0..num_lods {
-                headers.push(Some(MeshHeader::from_data(&buf[*data_offset..])?));
+                headers.push(Some(MeshHeader::from_le_bytes(&buf[*data_offset..])?));
                 *data_offset += size_of::<MeshHeader>();
             }
             headers
@@ -166,7 +176,7 @@ impl LodMeshHeader {
                 let (surface_header, surfaces) = gdata;
 
                 align(data_offset, 4);
-                let index_header = IndexBuffer::from_data(&buf[*data_offset..])?;
+                let index_header = IndexBuffer::from_le_bytes(&buf[*data_offset..])?;
                 let num_vertex_buffers = index_header.num_vertex_buffers as usize;
                 *data_offset += size_of::<IndexBuffer>();
 
@@ -180,11 +190,11 @@ impl LodMeshHeader {
 
                 let mut vertex_headers = Vec::with_capacity(num_vertex_buffers);
                 for _ in 0..index_header.num_vertex_buffers {
-                    vertex_headers.push(VertexBuffer::from_data(&buf[*data_offset..])?);
+                    vertex_headers.push(VertexBuffer::from_le_bytes(&buf[*data_offset..])?);
                     *data_offset += size_of::<VertexBuffer>();
                 }
 
-                Geometry {
+                Mesh {
                     surface_header,
                     surfaces,
                     index_header,
@@ -194,7 +204,7 @@ impl LodMeshHeader {
 
             let cpu = if let Some((surface_header, surfaces)) = cdata {
                 align(data_offset, 4);
-                let index_header = IndexBuffer::from_data(&buf[*data_offset..])?;
+                let index_header = IndexBuffer::from_le_bytes(&buf[*data_offset..])?;
 
                 let num_vertex_buffers = index_header.num_vertex_buffers as usize;
                 if num_vertex_buffers != 1 {
@@ -225,7 +235,7 @@ impl LodMeshHeader {
 
                 let mut vertex_headers = Vec::with_capacity(num_vertex_buffers);
                 for _ in 0..index_header.num_vertex_buffers {
-                    let vertex_header = VertexBuffer::from_data(&buf[*data_offset..])?;
+                    let vertex_header = VertexBuffer::from_le_bytes(&buf[*data_offset..])?;
 
                     if vertex_header.has_normals() {
                         return Err(VolitionError::UnexpectedValue {
@@ -253,7 +263,7 @@ impl LodMeshHeader {
                     *data_offset += size_of::<VertexBuffer>();
                 }
 
-                Some(Geometry {
+                Some(Mesh {
                     surface_header,
                     surfaces,
                     index_header,
@@ -298,7 +308,7 @@ impl LodMeshHeader {
 
 /// Deserialized
 #[derive(Debug, Clone)]
-pub struct Geometry {
+pub struct Mesh {
     pub surface_header: MeshHeader,
     pub surfaces: Vec<Surface>,
     pub index_header: IndexBuffer,
@@ -320,7 +330,7 @@ pub struct MeshHeader {
 }
 
 impl MeshHeader {
-    pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
+    pub fn from_le_bytes(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
 
         let num_surfaces = read_u16_le(buf, 0x2);
@@ -368,6 +378,16 @@ impl MeshHeader {
         })
     }
 
+    pub fn to_le_bytes(&self) -> [u8; size_of::<Self>()] {
+        let mut bytes = [0; size_of::<Self>()];
+        bytes[0x00..0x02].copy_from_slice(&self.unk_00.to_le_bytes());
+        bytes[0x02..0x04].copy_from_slice(&self.num_surfaces.to_le_bytes());
+        bytes[0x04..0x08].copy_from_slice(&(-1_i32).to_le_bytes());
+        bytes[0x08..0x0c].copy_from_slice(&(-1_i32).to_le_bytes());
+        bytes[0x0c..0x10].copy_from_slice(&0_i32.to_le_bytes());
+        bytes
+    }
+
     pub fn read_surfaces(
         &self,
         buf: &[u8],
@@ -376,7 +396,7 @@ impl MeshHeader {
         let num_surfaces = self.num_surfaces as usize;
         let mut surfaces = Vec::with_capacity(num_surfaces);
         for _ in 0..num_surfaces {
-            surfaces.push(Surface::from_data(&buf[*data_offset..])?);
+            surfaces.push(Surface::from_le_bytes(&buf[*data_offset..])?);
             *data_offset += size_of::<Surface>();
         }
         Ok(surfaces)
@@ -398,7 +418,7 @@ pub struct Surface {
 }
 
 impl Surface {
-    pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
+    pub fn from_le_bytes(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
         Ok(Self {
             vbuf: read_u32_le(buf, 0x0),
@@ -407,6 +427,16 @@ impl Surface {
             num_indices: read_u16_le(buf, 0xc),
             material: read_u16_le(buf, 0xe),
         })
+    }
+
+    pub fn to_le_bytes(&self) -> [u8; size_of::<Self>()] {
+        let mut bytes = [0; size_of::<Self>()];
+        bytes[0x00..0x04].copy_from_slice(&self.vbuf.to_le_bytes());
+        bytes[0x04..0x08].copy_from_slice(&self.start_index.to_le_bytes());
+        bytes[0x08..0x0c].copy_from_slice(&self.start_vertex.to_le_bytes());
+        bytes[0x0c..0x0e].copy_from_slice(&self.num_indices.to_le_bytes());
+        bytes[0x0e..0x10].copy_from_slice(&self.material.to_le_bytes());
+        bytes
     }
 }
 
@@ -426,7 +456,7 @@ pub struct IndexBuffer {
 }
 
 impl IndexBuffer {
-    pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
+    pub fn from_le_bytes(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
 
         let runtime_08 = read_i32_le(buf, 0x8);
@@ -464,6 +494,17 @@ impl IndexBuffer {
             runtime_0c,
             runtime_10,
         })
+    }
+
+    pub fn to_le_bytes(&self) -> [u8; size_of::<Self>()] {
+        let mut bytes = [0; size_of::<Self>()];
+        bytes[0x00..0x02].copy_from_slice(&self.mesh_type.to_le_bytes());
+        bytes[0x02..0x04].copy_from_slice(&self.num_vertex_buffers.to_le_bytes());
+        bytes[0x04..0x08].copy_from_slice(&self.num_indices.to_le_bytes());
+        bytes[0x08..0x0c].copy_from_slice(&(-1_i32).to_le_bytes());
+        bytes[0x0c..0x10].copy_from_slice(&(-1_i32).to_le_bytes());
+        bytes[0x10..0x14].copy_from_slice(&0_i32.to_le_bytes());
+        bytes
     }
 }
 
@@ -517,7 +558,7 @@ impl VertexBuffer {
         vertex_attr_len(self.attributes)
     }
 
-    pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
+    pub fn from_le_bytes(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
 
         let attributes = buf[0];
@@ -545,7 +586,7 @@ impl VertexBuffer {
         if stride as usize != expected_stride {
             return Err(VolitionError::ExpectedExactValue {
                 field: "VertexBuffer::stride (calculated from format)",
-                expected: attributes as i32,
+                expected: expected_stride as i32,
                 got: expected_stride as i32 - stride as i32,
             });
         }
@@ -577,6 +618,17 @@ impl VertexBuffer {
             unk_0c,
         })
     }
+
+    pub fn to_le_bytes(&self) -> [u8; size_of::<Self>()] {
+        let mut bytes = [0; size_of::<Self>()];
+        bytes[0] = self.attributes;
+        bytes[1] = self.num_uv_channels;
+        bytes[0x02..0x04].copy_from_slice(&self.stride.to_le_bytes());
+        bytes[0x04..0x08].copy_from_slice(&self.num_vertices.to_le_bytes());
+        bytes[0x08..0x0c].copy_from_slice(&(-1_i32).to_le_bytes());
+        bytes[0x0c..0x10].copy_from_slice(&0_i32.to_le_bytes());
+        bytes
+    }
 }
 
 const fn vertex_attr_len(attr: u8) -> usize {
@@ -591,4 +643,88 @@ const fn vertex_attr_len(attr: u8) -> usize {
         attr_len += 8;
     }
     attr_len
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn test_lod_mesh_header_cycle_bytes() {
+        let mut buf = vec![];
+
+        buf.extend_from_slice(&3.0_f32.to_le_bytes()); // aabb
+        buf.extend_from_slice(&4.0_f32.to_le_bytes());
+        buf.extend_from_slice(&5.0_f32.to_le_bytes());
+        buf.extend_from_slice(&7.0_f32.to_le_bytes());
+        buf.extend_from_slice(&8.0_f32.to_le_bytes());
+        buf.extend_from_slice(&9.0_f32.to_le_bytes());
+
+        buf.extend_from_slice(&0_i32.to_le_bytes()); // flags
+        buf.extend_from_slice(&4_i32.to_le_bytes()); // num_lods
+        buf.extend_from_slice(&(-1_i32).to_le_bytes()); // ptr_gpu
+        buf.extend_from_slice(&(-1_i32).to_le_bytes()); // ptr_cpu
+
+        let hed = LodMeshHeader::from_le_bytes(&buf).unwrap();
+        assert_eq!(buf, hed.to_le_bytes());
+    }
+
+    #[test]
+    fn test_mesh_header_cycle_bytes() {
+        let mut buf = vec![];
+
+        buf.extend_from_slice(&9_i16.to_le_bytes()); // unk_00
+        buf.extend_from_slice(&9_u16.to_le_bytes()); // num_surfaces
+        buf.extend_from_slice(&(-1_i32).to_le_bytes()); // ptr_04
+        buf.extend_from_slice(&(-1_i32).to_le_bytes()); // ptr_08
+        buf.extend_from_slice(&0_i32.to_le_bytes()); // unk_0c
+
+        let hed = MeshHeader::from_le_bytes(&buf).unwrap();
+        assert_eq!(buf, hed.to_le_bytes());
+    }
+
+    #[test]
+    fn test_surface_cycle_bytes() {
+        let mut buf = vec![];
+
+        buf.extend_from_slice(&3_u32.to_le_bytes()); // vbuf
+        buf.extend_from_slice(&4_u32.to_le_bytes()); // start_index
+        buf.extend_from_slice(&100_i32.to_le_bytes()); // start_vertex
+        buf.extend_from_slice(&52_u16.to_le_bytes()); // num_indices
+        buf.extend_from_slice(&7_i16.to_le_bytes()); // material
+
+        let hed = Surface::from_le_bytes(&buf).unwrap();
+        assert_eq!(buf, hed.to_le_bytes());
+    }
+
+    #[test]
+    fn test_index_buffer_cycle_bytes() {
+        let mut buf = vec![];
+
+        buf.extend_from_slice(&4_i16.to_le_bytes()); // mesh_type
+        buf.extend_from_slice(&100_u16.to_le_bytes()); // num_vertex_buffers
+        buf.extend_from_slice(&52_u32.to_le_bytes()); // num_indices
+        buf.extend_from_slice(&(-1_i32).to_le_bytes()); // runtime_08
+        buf.extend_from_slice(&(-1_i32).to_le_bytes()); // runtime_0c
+        buf.extend_from_slice(&0_i32.to_le_bytes()); // runtime_10
+
+        let hed = IndexBuffer::from_le_bytes(&buf).unwrap();
+        assert_eq!(buf, hed.to_le_bytes());
+    }
+
+    #[test]
+    fn test_vertex_buffer_cycle_bytes() {
+        let mut buf = vec![];
+
+        buf.push(0); // attributes
+        buf.push(3); // num_uv_channels
+        buf.extend_from_slice(&24_u16.to_le_bytes()); // stride
+        buf.extend_from_slice(&57_u32.to_le_bytes()); // num_vertices
+        buf.extend_from_slice(&(-1_i32).to_le_bytes()); // ptr_render_data
+        buf.extend_from_slice(&0_i32.to_le_bytes()); // unk_0c
+
+        let hed = VertexBuffer::from_le_bytes(&buf).unwrap();
+        assert_eq!(buf, hed.to_le_bytes());
+    }
 }

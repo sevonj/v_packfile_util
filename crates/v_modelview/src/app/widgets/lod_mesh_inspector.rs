@@ -3,10 +3,10 @@ use egui::UiBuilder;
 use egui::Widget;
 use egui_extras::Column;
 use egui_extras::TableBuilder;
-use v_types::Geometry;
 use v_types::IndexBuffer;
 use v_types::LodMeshData;
 use v_types::LodMeshHeader;
+use v_types::Mesh;
 use v_types::MeshHeader;
 use v_types::StaticMesh;
 use v_types::Surface;
@@ -127,7 +127,7 @@ fn lods_ui(ui: &mut egui::Ui, meshes: &[LodMeshData]) {
     }
 }
 
-fn geom_ui(ui: &mut egui::Ui, data: &Geometry) {
+fn geom_ui(ui: &mut egui::Ui, data: &Mesh) {
     geom_header_ui(ui, &data.surface_header);
 
     CollapsingHeader::new("Surfaces")

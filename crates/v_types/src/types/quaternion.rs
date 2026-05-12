@@ -11,7 +11,6 @@ use crate::VolitionError;
 use crate::util::*;
 
 /// 1:1 from disk
-/// 3D float vector
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(C)]
 pub struct Quaternion {
@@ -22,7 +21,7 @@ pub struct Quaternion {
 }
 
 impl Quaternion {
-    pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
+    pub fn from_le_bytes(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
         Ok(Self {
             x: read_f32_le(buf, 0x0),
@@ -30,6 +29,15 @@ impl Quaternion {
             z: read_f32_le(buf, 0x8),
             w: read_f32_le(buf, 0xc),
         })
+    }
+
+    pub fn to_le_bytes(&self) -> [u8; size_of::<Self>()] {
+        let mut bytes = [0; size_of::<Self>()];
+        bytes[0x0..0x04].copy_from_slice(&self.x.to_le_bytes());
+        bytes[0x4..0x08].copy_from_slice(&self.y.to_le_bytes());
+        bytes[0x8..0x0c].copy_from_slice(&self.z.to_le_bytes());
+        bytes[0xc..0x10].copy_from_slice(&self.w.to_le_bytes());
+        bytes
     }
 
     /// Returns `true` if any component is NaN.
@@ -44,7 +52,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_quaternion_size() {
+    fn test_quat_size() {
         assert_eq!(size_of::<Quaternion>(), 0x10);
+    }
+
+    #[test]
+    fn test_quat_cycle_bytes() {
+        let mut buf = vec![];
+        buf.extend_from_slice(&3.0_f32.to_le_bytes());
+        buf.extend_from_slice(&4.0_f32.to_le_bytes());
+        buf.extend_from_slice(&5.0_f32.to_le_bytes());
+        buf.extend_from_slice(&7.0_f32.to_le_bytes());
+        let quat = Quaternion::from_le_bytes(&buf).unwrap();
+        assert_eq!(buf, quat.to_le_bytes());
     }
 }

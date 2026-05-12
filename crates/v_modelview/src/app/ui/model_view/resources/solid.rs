@@ -147,7 +147,7 @@ pub fn cpu_geom_lods(device: &wgpu::Device, smesh: &v_types::StaticMesh) -> Vec<
         .iter()
         .filter(|s: &&v_types::LodMeshData| s.cpu_geometry.is_some())
         .map(|s| {
-            let cpu_data: &v_types::Geometry = s.cpu_geometry.as_ref().unwrap();
+            let cpu_data: &v_types::Mesh = s.cpu_geometry.as_ref().unwrap();
 
             let mut offset = 0;
             let vbufs = cpu_data

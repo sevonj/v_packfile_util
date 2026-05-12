@@ -73,7 +73,7 @@ impl StaticMesh {
         align(data_offset, 4);
         let matlib = MaterialsData::from_data(buf, data_offset)?;
 
-        let mesh_header = LodMeshHeader::from_data(&buf[*data_offset..])?;
+        let mesh_header = LodMeshHeader::from_le_bytes(&buf[*data_offset..])?;
         *data_offset += size_of::<LodMeshHeader>();
 
         let lod_meshes = mesh_header.read_data(buf, data_offset, header.unk_2c)?;
@@ -110,7 +110,7 @@ impl StaticMesh {
             let stride = vhead.stride as usize;
             for i in 0..vhead.num_vertices as usize {
                 let v_off = i * stride;
-                let pos = Vector::from_data(&vbuf[v_off..]).unwrap();
+                let pos = Vector::from_le_bytes(&vbuf[v_off..]).unwrap();
                 let (u, v) = if vhead.num_uv_channels > 0 {
                     let uv_offset = v_off + vhead.off_uv();
                     (
@@ -310,7 +310,7 @@ impl StaticMeshHeader {
             num_textures,
             num_navpoints,
             unk_10: read_i32_le(buf, 0x10),
-            bounding_center: Vector::from_data(&buf[0x14..])?,
+            bounding_center: Vector::from_le_bytes(&buf[0x14..])?,
             bounding_radius: read_f32_le(buf, 0x20),
             num_bones,
             unk_28: read_i32_le(buf, 0x28),
@@ -343,8 +343,8 @@ impl StaticMeshNavpoint {
         Ok(Self {
             name: read_bytes(buf, 0x0),
             vid: read_i32_le(buf, Self::MAX_NAME_LENGTH),
-            pos: Vector::from_data(&buf[Self::MAX_NAME_LENGTH + 4..])?,
-            orient: Quaternion::from_data(&buf[Self::MAX_NAME_LENGTH + 16..])?,
+            pos: Vector::from_le_bytes(&buf[Self::MAX_NAME_LENGTH + 4..])?,
+            orient: Quaternion::from_le_bytes(&buf[Self::MAX_NAME_LENGTH + 16..])?,
         })
     }
 
