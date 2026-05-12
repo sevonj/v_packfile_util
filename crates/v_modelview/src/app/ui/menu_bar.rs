@@ -17,7 +17,7 @@ impl VModelViewer {
             .show_inside(ui, |ui| {
                 ui.horizontal(|ui| {
                     self.file_menu(ui);
-                    self.dump_menu(ui);
+                    self.export_menu(ui);
 
                     ui.separator();
 
@@ -53,8 +53,8 @@ impl VModelViewer {
         });
     }
 
-    fn dump_menu(&mut self, ui: &mut Ui) {
-        ui.menu_button("Dump", |ui| {
+    fn export_menu(&mut self, ui: &mut Ui) {
+        ui.menu_button("Export", |ui| {
             if !self.is_file_open() {
                 ui.disable();
             }
@@ -64,18 +64,16 @@ impl VModelViewer {
                 .as_ref()
                 .is_some_and(|model_data| model_data.smesh.mesh_header.has_cpu_geometry());
             if ui
-                .add_enabled(has_cpu_geom, Button::new("Export Wavefront (very lossy)"))
+                .add_enabled(has_cpu_geom, Button::new("Wavefront"))
+                .on_hover_text("Very lossy.")
                 .clicked()
             {
                 self.prompt_dump_cpu(false);
             }
 
             if ui
-                .add_enabled(
-                    has_cpu_geom,
-                    Button::new("Export Wavefront Separate (very lossy)"),
-                )
-                .on_hover_text("Export each surface as a separate object.")
+                .add_enabled(has_cpu_geom, Button::new("Wavefront Separate"))
+                .on_hover_text("Very lossy. Export each surface as a separate object.")
                 .clicked()
             {
                 self.prompt_dump_cpu(true);
