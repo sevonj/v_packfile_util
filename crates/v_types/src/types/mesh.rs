@@ -17,6 +17,7 @@ pub struct LodMeshData {
     /// Headers for geometry that lives in CPU RAM
     /// Purpose unknown, sometimes not present
     /// Always has exactly one vertex buffer
+    /// Never has UV channels. Only possible extra attribute is bones.
     /// If exists, number of surfaces matches gpu data
     pub cpu_geometry: Option<Geometry>,
     pub unk_20b: Option<[u8; 20]>,
@@ -225,6 +226,20 @@ impl LodMeshHeader {
                 let mut vertex_headers = Vec::with_capacity(num_vertex_buffers);
                 for _ in 0..index_header.num_vertex_buffers {
                     let vertex_header = VertexBuffer::from_data(&buf[*data_offset..])?;
+
+                    if vertex_header.has_normals() {
+                        return Err(VolitionError::UnexpectedValue {
+                            desc: "VertexBufferHeader::attributes shouldn't have normals (cpu)",
+                            got: vertex_header.attributes as i32,
+                        });
+                    }
+
+                    if vertex_header.has_unk_attr() {
+                        return Err(VolitionError::UnexpectedValue {
+                            desc: "VertexBufferHeader::attributes shouldn't have unk_attr (cpu)",
+                            got: vertex_header.attributes as i32,
+                        });
+                    }
 
                     if vertex_header.num_uv_channels != 0 {
                         return Err(VolitionError::ExpectedExactValue {
@@ -475,6 +490,7 @@ impl VertexBuffer {
         self.attributes & V_ATTR_FLAG_NORMAL != 0
     }
 
+    /// maybe morph
     pub const fn has_unk_attr(&self) -> bool {
         self.attributes & V_ATTR_FLAG_UNK != 0
     }
