@@ -1,9 +1,14 @@
+use std::io::Write;
+
+use crate::IndexBuffer;
 use crate::LodMeshData;
 use crate::LodMeshHeader;
 use crate::MaterialsData;
+use crate::MeshHeader;
 use crate::Quaternion;
 use crate::Surface;
 use crate::Vector;
+use crate::VertexBuffer;
 use crate::VolitionError;
 use crate::util::*;
 
@@ -99,6 +104,125 @@ impl StaticMesh {
             unk_20b,
             lod_meshes,
         })
+    }
+
+    pub fn write<W: Write>(
+        &self,
+        w: &mut W,
+        data_offset: &mut usize,
+    ) -> Result<(), std::io::Error> {
+        align_pad(w, data_offset, 16)?;
+
+        w.write_all(&self.header.to_le_bytes())?;
+        for _ in size_of::<StaticMeshHeader>()..0x40 {
+            w.write_all(&[0])?;
+        }
+        *data_offset += 0x40;
+
+        for flag in &self.texture_flags {
+            w.write_all(&flag.to_le_bytes())?;
+            *data_offset += 4;
+        }
+
+        align_pad(w, data_offset, 16)?;
+        *data_offset += 1;
+        w.write_all(&[0])?;
+        for name in &self.texture_names {
+            w.write_all(name.as_bytes())?;
+            w.write_all(&[0])?;
+            *data_offset += name.len() + 1;
+        }
+
+        if !self.navpoints.is_empty() {
+            align_pad(w, data_offset, 16)?;
+            for navpoint in &self.navpoints {
+                w.write_all(&navpoint.to_le_bytes())?;
+                *data_offset += size_of::<StaticMeshNavpoint>();
+            }
+        }
+
+        if !self.bone_indices.is_empty() {
+            align_pad(w, data_offset, 16)?;
+            for boneidx in &self.bone_indices {
+                w.write_all(&boneidx.to_le_bytes())?;
+                *data_offset += 4;
+            }
+        }
+
+        self.matlib.write(w, data_offset)?;
+
+        w.write_all(&self.mesh_header.to_le_bytes())?;
+        *data_offset += size_of::<LodMeshHeader>();
+        if let Some(unk20b) = &self.unk_20b {
+            w.write_all(unk20b)?;
+            *data_offset += 20;
+        }
+
+        align_pad(w, data_offset, 16)?;
+        for lod in &self.lod_meshes {
+            w.write_all(&lod.gpu_geometry.header.to_le_bytes())?;
+            *data_offset += size_of::<MeshHeader>();
+        }
+        for lod in &self.lod_meshes {
+            if let Some(cpu_geom) = &lod.cpu_geometry {
+                w.write_all(&cpu_geom.header.to_le_bytes())?;
+                *data_offset += size_of::<MeshHeader>();
+            }
+        }
+        for lod in &self.lod_meshes {
+            {
+                let gpu_geom = &lod.gpu_geometry;
+                for surf in &gpu_geom.surfaces {
+                    w.write_all(&surf.to_le_bytes())?;
+                    *data_offset += size_of::<Surface>();
+                }
+            }
+
+            if let Some(cpu_geom) = &lod.cpu_geometry {
+                for surf in &cpu_geom.surfaces {
+                    w.write_all(&surf.to_le_bytes())?;
+                    *data_offset += size_of::<Surface>();
+                }
+            }
+        }
+        for lod in &self.lod_meshes {
+            {
+                let gpu_geom = &lod.gpu_geometry;
+                align_pad(w, data_offset, 4)?;
+                w.write_all(&gpu_geom.index_header.to_le_bytes())?;
+                *data_offset += size_of::<IndexBuffer>();
+
+                for vertex_header in &gpu_geom.vertex_headers {
+                    w.write_all(&vertex_header.to_le_bytes())?;
+                    *data_offset += size_of::<VertexBuffer>();
+                }
+            }
+
+            if let Some(cpu_geom) = &lod.cpu_geometry {
+                align_pad(w, data_offset, 4)?;
+                w.write_all(&cpu_geom.index_header.to_le_bytes())?;
+                *data_offset += size_of::<IndexBuffer>();
+
+                for vertex_header in &cpu_geom.vertex_headers {
+                    w.write_all(&vertex_header.to_le_bytes())?;
+                    *data_offset += size_of::<VertexBuffer>();
+                }
+            }
+
+            if lod.cpu_geometry.is_some() {
+                align_pad(w, data_offset, 16)?;
+                w.write_all(&lod.cpu_vdata)?;
+                *data_offset += lod.cpu_vdata.len();
+
+                align_pad(w, data_offset, 16)?;
+                w.write_all(&lod.cpu_idata)?;
+                *data_offset += lod.cpu_idata.len();
+            }
+        }
+
+        align_pad(w, data_offset, 16)?;
+
+        Ok(())
     }
 
     pub fn dump_wavefront(&self, g_smesh: Option<&[u8]>, separate_surfaces: bool) -> String {
@@ -408,9 +532,13 @@ impl StaticMeshNavpoint {
 #[cfg(test)]
 mod tests {
 
+    use std::io::BufWriter;
     use std::path::PathBuf;
 
     use super::*;
+
+    const NUM_SMESH: usize = 659;
+    const NUM_CMESH: usize = 3028;
 
     #[test]
     fn test_header_cycle_bytes() {
@@ -479,7 +607,7 @@ mod tests {
         }
         println!("num_failed: {num_failed:?}");
         assert_eq!(num_failed, 0);
-        assert_eq!(num_success, 659);
+        assert_eq!(num_success, NUM_SMESH);
     }
 
     #[test]
@@ -515,6 +643,75 @@ mod tests {
     }
 
     #[test]
+    fn test_cycle_every_smesh() {
+        // Unpacked meshes.vpp_pc
+        let samples_path = PathBuf::from("../../samples/meshes_extracted");
+
+        let mut num_failed = 0;
+        for entry in std::fs::read_dir(samples_path).unwrap() {
+            let entry = entry.unwrap();
+            let path = entry.path();
+
+            if !entry.metadata().unwrap().is_file() || path.extension().unwrap() != "smesh_pc" {
+                continue;
+            }
+
+            let input_buf = std::fs::read(&path).unwrap();
+            let smesh = StaticMesh::from_data(&input_buf, &mut 0).unwrap();
+
+            let mut out_buf = Vec::with_capacity(input_buf.len());
+            let mut w = BufWriter::new(&mut out_buf);
+
+            smesh.write(&mut w, &mut 0).unwrap();
+            drop(w);
+
+            let input_slice = &input_buf[..out_buf.len()];
+            if out_buf != input_slice {
+                num_failed += 1;
+                println!("ERR: {path:?}");
+                // println!("exp: {input_slice:?}");
+                // println!("got: {out_buf:?}");
+            }
+        }
+        println!("num_failed: {num_failed:?}");
+        assert_eq!(num_failed, 0);
+    }
+
+    #[test]
+    fn test_cycle_every_smesh_to_end() {
+        // Unpacked meshes.vpp_pc
+        let samples_path = PathBuf::from("../../samples/meshes_extracted");
+
+        let mut num_failed = 0;
+        for entry in std::fs::read_dir(samples_path).unwrap() {
+            let entry = entry.unwrap();
+            let path = entry.path();
+
+            if !entry.metadata().unwrap().is_file() || path.extension().unwrap() != "smesh_pc" {
+                continue;
+            }
+
+            let input_buf = std::fs::read(&path).unwrap();
+            let smesh = StaticMesh::from_data(&input_buf, &mut 0).unwrap();
+
+            let mut out_buf = Vec::with_capacity(input_buf.len());
+            let mut w = BufWriter::new(&mut out_buf);
+
+            smesh.write(&mut w, &mut 0).unwrap();
+            drop(w);
+
+            if out_buf != input_buf {
+                num_failed += 1;
+                println!("ERR: {path:?}");
+                // println!("exp: {input_buf:?}");
+                // println!("got: {out_buf:?}");
+            }
+        }
+        println!("num_failed: {num_failed:?}");
+        assert_eq!(num_failed, 0);
+    }
+
+    #[test]
     fn test_parse_every_cmesh() {
         // Unpacked meshes.vpp_pc
         let samples_path = PathBuf::from("../../samples/meshes_extracted");
@@ -540,7 +737,7 @@ mod tests {
         }
         println!("num_failed: {num_failed:?}");
         assert_eq!(num_failed, 0);
-        assert_eq!(num_success, 3028);
+        assert_eq!(num_success, NUM_CMESH);
     }
 
     // #[test]

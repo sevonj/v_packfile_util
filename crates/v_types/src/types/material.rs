@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use crate::VolitionError;
 use crate::util::*;
 
@@ -11,7 +13,8 @@ pub const MAX_UKNOWN4_VALUE: usize = 0xffff;
 #[derive(Debug, Clone)]
 pub struct MaterialsData {
     pub materials: Vec<Material>,
-    pub mat_unk1s: Vec<[u8; 16]>,
+    pub mat_unk1s: Vec<Vec<u8>>,
+    pub mat_unk2s: Vec<[u8; 16]>,
     pub mat_consts: Vec<f32>,
     pub mat_textures: Vec<MaterialTextureEntry>,
     pub mat_unknown3s: Vec<MaterialUnknown3>,
@@ -33,14 +36,21 @@ impl MaterialsData {
             *data_offset += size_of::<Material>();
         }
 
+        let mut mat_unk1s = Vec::with_capacity(num_materials);
         for material in &materials {
             align(data_offset, 4);
-            *data_offset += material.num_unknown as usize * 6;
+            let mut data = vec![];
+            for _ in 0..material.num_unknown {
+                let slice: [u8; 6] = read_bytes(buf, *data_offset);
+                data.extend_from_slice(&slice);
+                *data_offset += 6;
+            }
+            mat_unk1s.push(data);
         }
 
-        let mut mat_unk1s: Vec<[u8; 16]> = Vec::with_capacity(num_materials);
+        let mut mat_unk2s: Vec<[u8; 16]> = Vec::with_capacity(num_materials);
         for _ in 0..num_materials {
-            mat_unk1s.push(read_bytes(buf, *data_offset));
+            mat_unk2s.push(read_bytes(buf, *data_offset));
             *data_offset += 16;
         }
 
@@ -97,14 +107,75 @@ impl MaterialsData {
                 *data_offset += 4;
             }
         }
+
         Ok(Self {
             materials,
             mat_unk1s,
+            mat_unk2s,
             mat_consts,
             mat_textures,
             mat_unknown3s,
             mat_unknown4s,
         })
+    }
+
+    pub fn write<W: Write>(
+        &self,
+        w: &mut W,
+        data_offset: &mut usize,
+    ) -> Result<(), std::io::Error> {
+        align_pad(w, data_offset, 4)?;
+
+        w.write_all(
+            &MaterialsHeader::new(
+                self.materials.len() as u32,
+                self.mat_consts.len() as u32,
+                self.mat_unknown3s.len() as u32,
+            )
+            .to_le_bytes(),
+        )?;
+        *data_offset += size_of::<MaterialsHeader>();
+
+        for material in &self.materials {
+            w.write_all(&material.to_le_bytes())?;
+            *data_offset += size_of::<Material>();
+        }
+
+        for mat_unk1 in &self.mat_unk1s {
+            align_pad(w, data_offset, 4)?;
+            w.write_all(mat_unk1)?;
+            *data_offset += mat_unk1.len();
+        }
+
+        for mat_unk2 in &self.mat_unk2s {
+            align_pad(w, data_offset, 4)?;
+            w.write_all(mat_unk2)?;
+            *data_offset += 16;
+        }
+
+        align_pad(w, data_offset, 16)?;
+
+        for shader_const in &self.mat_consts {
+            w.write_all(&shader_const.to_le_bytes())?;
+            *data_offset += 4;
+        }
+
+        for tex in &self.mat_textures {
+            w.write_all(&tex.to_le_bytes())?;
+            *data_offset += size_of::<MaterialTextureEntry>();
+        }
+
+        for unk3 in &self.mat_unknown3s {
+            w.write_all(&unk3.to_le_bytes())?;
+            *data_offset += size_of::<MaterialUnknown3>();
+        }
+
+        for unk4 in &self.mat_unknown4s {
+            w.write_all(&unk4.to_le_bytes())?;
+            *data_offset += 4;
+        }
+
+        Ok(())
     }
 }
 
@@ -132,6 +203,20 @@ pub struct MaterialsHeader {
 }
 
 impl MaterialsHeader {
+    pub fn new(num_materials: u32, num_shader_consts: u32, num_mat_unknown3: u32) -> Self {
+        Self {
+            num_materials,
+            unknown_04: 0,
+            unknown_08: 0,
+            unknown_0c: 0,
+            num_shader_consts,
+            unknown_14: 0,
+            unknown_18: 0,
+            num_mat_unknown3,
+            unknown_20: 0,
+        }
+    }
+
     pub fn from_le_unsized(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
         Self::from_le_bytes(buf[..size_of::<Self>()].try_into().unwrap())

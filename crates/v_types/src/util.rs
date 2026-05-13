@@ -66,3 +66,19 @@ pub fn read_cstr(buf: &[u8], offset: usize) -> Result<&str, VolitionError> {
 pub fn align(offset: &mut usize, align: usize) {
     *offset = offset.div_ceil(align) * align;
 }
+
+pub fn aligned(offset: usize, align: usize) -> usize {
+    offset.div_ceil(align) * align
+}
+
+pub fn align_pad<W: std::io::Write>(
+    w: &mut W,
+    data_offset: &mut usize,
+    align: usize,
+) -> Result<(), std::io::Error> {
+    while !data_offset.is_multiple_of(align) {
+        w.write_all(&[0])?;
+        *data_offset += 1;
+    }
+    Ok(())
+}
