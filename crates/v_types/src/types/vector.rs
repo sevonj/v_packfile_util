@@ -21,8 +21,12 @@ pub struct Vector {
 }
 
 impl Vector {
-    pub fn from_le_bytes(buf: &[u8]) -> Result<Self, VolitionError> {
+    pub fn from_le_unsized(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
+        Self::from_le_bytes(buf[..size_of::<Self>()].try_into().unwrap())
+    }
+
+    pub fn from_le_bytes(buf: &[u8; size_of::<Self>()]) -> Result<Self, VolitionError> {
         Ok(Self {
             x: read_f32_le(buf, 0x0),
             y: read_f32_le(buf, 0x4),
@@ -66,7 +70,7 @@ mod tests {
         buf.extend_from_slice(&3.0_f32.to_le_bytes());
         buf.extend_from_slice(&4.0_f32.to_le_bytes());
         buf.extend_from_slice(&5.0_f32.to_le_bytes());
-        let vec = Vector::from_le_bytes(&buf).unwrap();
+        let vec = Vector::from_le_unsized(&buf).unwrap();
         assert_eq!(buf, vec.to_le_bytes());
     }
 }

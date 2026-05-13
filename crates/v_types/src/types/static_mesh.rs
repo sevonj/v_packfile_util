@@ -29,7 +29,7 @@ pub struct StaticMesh {
 
 impl StaticMesh {
     pub fn from_data(buf: &[u8], data_offset: &mut usize) -> Result<Self, VolitionError> {
-        let header = StaticMeshHeader::from_data(buf)?;
+        let header = StaticMeshHeader::from_le_unsized(buf)?;
 
         let num_textures = header.num_textures as usize;
         let num_navpoints = header.num_navpoints as usize;
@@ -74,7 +74,7 @@ impl StaticMesh {
         align(data_offset, 4);
         let matlib = MaterialsData::from_data(buf, data_offset)?;
 
-        let mesh_header = LodMeshHeader::from_le_bytes(&buf[*data_offset..])?;
+        let mesh_header = LodMeshHeader::from_le_unsized(&buf[*data_offset..])?;
         *data_offset += size_of::<LodMeshHeader>();
 
         let unk_20b = if header.unk_2c != 0 {
@@ -121,7 +121,7 @@ impl StaticMesh {
             let stride = vhead.stride as usize;
             for i in 0..vhead.num_vertices as usize {
                 let v_off = i * stride;
-                let pos = Vector::from_le_bytes(&vbuf[v_off..]).unwrap();
+                let pos = Vector::from_le_unsized(&vbuf[v_off..]).unwrap();
                 let (u, v) = if vhead.num_uv_channels > 0 {
                     let uv_offset = v_off + vhead.off_uv();
                     (
@@ -269,9 +269,12 @@ impl StaticMeshHeader {
     pub const SIGNATURE: i32 = 0x424BD00D;
     pub const VERSION: i16 = 33;
 
-    pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
+    pub fn from_le_unsized(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
+        Self::from_le_bytes(buf[..size_of::<Self>()].try_into().unwrap())
+    }
 
+    pub fn from_le_bytes(buf: &[u8; size_of::<Self>()]) -> Result<Self, VolitionError> {
         let magic = read_i32_le(buf, 0);
         if magic != Self::SIGNATURE {
             return Err(VolitionError::ExpectedExactValue {
@@ -329,7 +332,7 @@ impl StaticMeshHeader {
             num_textures,
             num_navpoints,
             unk_10: read_i32_le(buf, 0x10),
-            bounding_center: Vector::from_le_bytes(&buf[0x14..])?,
+            bounding_center: Vector::from_le_unsized(&buf[0x14..])?,
             bounding_radius: read_f32_le(buf, 0x20),
             num_bones,
             unk_28: read_i32_le(buf, 0x28),
@@ -362,8 +365,8 @@ impl StaticMeshNavpoint {
         Ok(Self {
             name: read_bytes(buf, 0x0),
             vid: read_i32_le(buf, Self::MAX_NAME_LENGTH),
-            pos: Vector::from_le_bytes(&buf[Self::MAX_NAME_LENGTH + 4..])?,
-            orient: Quaternion::from_le_bytes(&buf[Self::MAX_NAME_LENGTH + 16..])?,
+            pos: Vector::from_le_unsized(&buf[Self::MAX_NAME_LENGTH + 4..])?,
+            orient: Quaternion::from_le_unsized(&buf[Self::MAX_NAME_LENGTH + 16..])?,
         })
     }
 

@@ -11,11 +11,15 @@ pub struct AABB {
 }
 
 impl AABB {
-    pub fn from_le_bytes(buf: &[u8]) -> Result<Self, VolitionError> {
+    pub fn from_le_unsized(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
+        Self::from_le_bytes(buf[..size_of::<Self>()].try_into().unwrap())
+    }
+
+    pub fn from_le_bytes(buf: &[u8; size_of::<Self>()]) -> Result<Self, VolitionError> {
         Ok(Self {
-            min: Vector::from_le_bytes(buf)?,
-            max: Vector::from_le_bytes(&buf[12..])?,
+            min: Vector::from_le_unsized(buf)?,
+            max: Vector::from_le_unsized(&buf[12..])?,
         })
     }
 
@@ -51,7 +55,7 @@ mod tests {
         buf.extend_from_slice(&7.0_f32.to_le_bytes());
         buf.extend_from_slice(&8.0_f32.to_le_bytes());
         buf.extend_from_slice(&9.0_f32.to_le_bytes());
-        let bbox = AABB::from_le_bytes(&buf).unwrap();
+        let bbox = AABB::from_le_unsized(&buf).unwrap();
         assert_eq!(buf, bbox.to_le_bytes());
     }
 }

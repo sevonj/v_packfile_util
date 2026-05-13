@@ -20,7 +20,7 @@ pub struct MaterialsData {
 
 impl MaterialsData {
     pub fn from_data(buf: &[u8], data_offset: &mut usize) -> Result<Self, VolitionError> {
-        let material_block = MaterialsHeader::from_data(&buf[*data_offset..])?;
+        let material_block = MaterialsHeader::from_le_unsized(&buf[*data_offset..])?;
         *data_offset += size_of::<MaterialsHeader>();
 
         let num_materials = material_block.num_materials as usize;
@@ -29,7 +29,7 @@ impl MaterialsData {
 
         let mut materials = Vec::with_capacity(num_materials);
         for _ in 0..num_materials {
-            materials.push(Material::from_data(&buf[*data_offset..])?);
+            materials.push(Material::from_le_unsized(&buf[*data_offset..])?);
             *data_offset += size_of::<Material>();
         }
 
@@ -57,7 +57,7 @@ impl MaterialsData {
         let mut mat_textures = Vec::with_capacity(num_materials);
         for material in &materials {
             for i in 0..16 {
-                let entry = MaterialTextureEntry::from_data(&buf[*data_offset..])?;
+                let entry = MaterialTextureEntry::from_le_unsized(&buf[*data_offset..])?;
                 if i < material.num_textures && !entry.is_valid() {
                     let got = read_i32_le(buf, *data_offset);
                     return Err(VolitionError::UnexpectedValue {
@@ -78,7 +78,7 @@ impl MaterialsData {
 
         let mut mat_unknown3s = Vec::with_capacity(num_mat_unknown3);
         for _ in 0..num_mat_unknown3 {
-            mat_unknown3s.push(MaterialUnknown3::from_data(&buf[*data_offset..])?);
+            mat_unknown3s.push(MaterialUnknown3::from_le_unsized(&buf[*data_offset..])?);
             *data_offset += size_of::<MaterialUnknown3>();
         }
 
@@ -132,9 +132,12 @@ pub struct MaterialsHeader {
 }
 
 impl MaterialsHeader {
-    pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
+    pub fn from_le_unsized(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
+        Self::from_le_bytes(buf[..size_of::<Self>()].try_into().unwrap())
+    }
 
+    pub fn from_le_bytes(buf: &[u8; size_of::<Self>()]) -> Result<Self, VolitionError> {
         let num_materials = read_u32_le(buf, 0x0);
         if num_materials > MAX_MATERIALS {
             return Err(VolitionError::ValueTooHigh {
@@ -253,9 +256,12 @@ pub struct Material {
 }
 
 impl Material {
-    pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
+    pub fn from_le_unsized(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
+        Self::from_le_bytes(buf[..size_of::<Self>()].try_into().unwrap())
+    }
 
+    pub fn from_le_bytes(buf: &[u8; size_of::<Self>()]) -> Result<Self, VolitionError> {
         let runtime_14 = read_i32_le(buf, 0x14);
         // Usually, but not always?
         // if runtime_14 != -1 {
@@ -305,8 +311,12 @@ impl MaterialTextureEntry {
         }
     }
 
-    pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
+    pub fn from_le_unsized(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
+        Self::from_le_bytes(buf[..size_of::<Self>()].try_into().unwrap())
+    }
+
+    pub fn from_le_bytes(buf: &[u8; size_of::<Self>()]) -> Result<Self, VolitionError> {
         Ok(Self {
             index: read_i16_le(buf, 0x0),
             flags: read_i16_le(buf, 0x2),
@@ -326,9 +336,12 @@ pub struct MaterialUnknown3 {
 }
 
 impl MaterialUnknown3 {
-    pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
+    pub fn from_le_unsized(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
+        Self::from_le_bytes(buf[..size_of::<Self>()].try_into().unwrap())
+    }
 
+    pub fn from_le_bytes(buf: &[u8; size_of::<Self>()]) -> Result<Self, VolitionError> {
         let num_mat_unk4 = read_u16_le(buf, 0x8);
         if num_mat_unk4 > MAX_UNKNOWN4S {
             return Err(VolitionError::ValueTooHigh {

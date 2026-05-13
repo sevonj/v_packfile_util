@@ -41,8 +41,12 @@ pub struct LodMeshHeader {
 }
 
 impl LodMeshHeader {
-    pub fn from_le_bytes(buf: &[u8]) -> Result<Self, VolitionError> {
+    pub fn from_le_unsized(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
+        Self::from_le_bytes(buf[..size_of::<Self>()].try_into().unwrap())
+    }
+
+    pub fn from_le_bytes(buf: &[u8; size_of::<Self>()]) -> Result<Self, VolitionError> {
         let num_lods = read_u32_le(buf, 0x1c);
         if num_lods > MAX_LODS {
             return Err(VolitionError::ValueTooHigh {
@@ -77,7 +81,7 @@ impl LodMeshHeader {
         }
 
         Ok(Self {
-            bbox: AABB::from_le_bytes(buf)?,
+            bbox: AABB::from_le_unsized(buf)?,
             flags: read_i32_le(buf, 0x18),
             num_lods,
             ptr_gpu,
@@ -116,14 +120,14 @@ impl LodMeshHeader {
 
         let mut gpu_headers = Vec::with_capacity(num_lods);
         for _ in 0..num_lods {
-            gpu_headers.push(MeshHeader::from_le_bytes(&buf[*data_offset..])?);
+            gpu_headers.push(MeshHeader::from_le_unsized(&buf[*data_offset..])?);
             *data_offset += size_of::<MeshHeader>();
         }
 
         let cpu_headers = if self.has_cpu_geometry() {
             let mut headers = Vec::with_capacity(num_lods);
             for _ in 0..num_lods {
-                headers.push(Some(MeshHeader::from_le_bytes(&buf[*data_offset..])?));
+                headers.push(Some(MeshHeader::from_le_unsized(&buf[*data_offset..])?));
                 *data_offset += size_of::<MeshHeader>();
             }
             headers
@@ -185,7 +189,7 @@ impl LodMeshHeader {
                 let (surface_header, surfaces) = gdata;
 
                 align(data_offset, 4);
-                let index_header = IndexBuffer::from_le_bytes(&buf[*data_offset..])?;
+                let index_header = IndexBuffer::from_le_unsized(&buf[*data_offset..])?;
                 let num_vertex_buffers = index_header.num_vertex_buffers as usize;
                 *data_offset += size_of::<IndexBuffer>();
 
@@ -199,7 +203,7 @@ impl LodMeshHeader {
 
                 let mut vertex_headers = Vec::with_capacity(num_vertex_buffers);
                 for _ in 0..index_header.num_vertex_buffers {
-                    vertex_headers.push(VertexBuffer::from_le_bytes(&buf[*data_offset..])?);
+                    vertex_headers.push(VertexBuffer::from_le_unsized(&buf[*data_offset..])?);
                     *data_offset += size_of::<VertexBuffer>();
                 }
 
@@ -213,7 +217,7 @@ impl LodMeshHeader {
 
             let cpu = if let Some((surface_header, surfaces)) = cdata {
                 align(data_offset, 4);
-                let index_header = IndexBuffer::from_le_bytes(&buf[*data_offset..])?;
+                let index_header = IndexBuffer::from_le_unsized(&buf[*data_offset..])?;
 
                 let num_vertex_buffers = index_header.num_vertex_buffers as usize;
                 if num_vertex_buffers != 1 {
@@ -244,7 +248,7 @@ impl LodMeshHeader {
 
                 let mut vertex_headers = Vec::with_capacity(num_vertex_buffers);
                 for _ in 0..index_header.num_vertex_buffers {
-                    let vertex_header = VertexBuffer::from_le_bytes(&buf[*data_offset..])?;
+                    let vertex_header = VertexBuffer::from_le_unsized(&buf[*data_offset..])?;
 
                     if vertex_header.has_normals() {
                         return Err(VolitionError::UnexpectedValue {
@@ -338,9 +342,12 @@ pub struct MeshHeader {
 }
 
 impl MeshHeader {
-    pub fn from_le_bytes(buf: &[u8]) -> Result<Self, VolitionError> {
+    pub fn from_le_unsized(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
+        Self::from_le_bytes(buf[..size_of::<Self>()].try_into().unwrap())
+    }
 
+    pub fn from_le_bytes(buf: &[u8; size_of::<Self>()]) -> Result<Self, VolitionError> {
         let num_surfaces = read_u16_le(buf, 0x2);
         if num_surfaces > MAX_SURFACES {
             return Err(VolitionError::ValueTooHigh {
@@ -403,7 +410,7 @@ impl MeshHeader {
         let num_surfaces = self.num_surfaces as usize;
         let mut surfaces = Vec::with_capacity(num_surfaces);
         for _ in 0..num_surfaces {
-            surfaces.push(Surface::from_le_bytes(&buf[*data_offset..])?);
+            surfaces.push(Surface::from_le_unsized(&buf[*data_offset..])?);
             *data_offset += size_of::<Surface>();
         }
         Ok(surfaces)
@@ -425,7 +432,12 @@ pub struct Surface {
 }
 
 impl Surface {
-    pub fn from_le_bytes(buf: &[u8]) -> Result<Self, VolitionError> {
+    pub fn from_le_unsized(buf: &[u8]) -> Result<Self, VolitionError> {
+        check_fits_buf::<Self>(buf)?;
+        Self::from_le_bytes(buf[..size_of::<Self>()].try_into().unwrap())
+    }
+
+    pub fn from_le_bytes(buf: &[u8; size_of::<Self>()]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
         Ok(Self {
             vbuf: read_u32_le(buf, 0x0),
@@ -463,9 +475,12 @@ pub struct IndexBuffer {
 }
 
 impl IndexBuffer {
-    pub fn from_le_bytes(buf: &[u8]) -> Result<Self, VolitionError> {
+    pub fn from_le_unsized(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
+        Self::from_le_bytes(buf[..size_of::<Self>()].try_into().unwrap())
+    }
 
+    pub fn from_le_bytes(buf: &[u8; size_of::<Self>()]) -> Result<Self, VolitionError> {
         let runtime_08 = read_i32_le(buf, 0x8);
         if runtime_08 != -1 {
             return Err(VolitionError::ExpectedExactValue {
@@ -565,9 +580,12 @@ impl VertexBuffer {
         vertex_attr_len(self.attributes)
     }
 
-    pub fn from_le_bytes(buf: &[u8]) -> Result<Self, VolitionError> {
+    pub fn from_le_unsized(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
+        Self::from_le_bytes(buf[..size_of::<Self>()].try_into().unwrap())
+    }
 
+    pub fn from_le_bytes(buf: &[u8; size_of::<Self>()]) -> Result<Self, VolitionError> {
         let attributes = buf[0];
         if attributes > 5 {
             return Err(VolitionError::UnexpectedValue {
@@ -673,7 +691,7 @@ mod tests {
         buf.extend_from_slice(&(-1_i32).to_le_bytes()); // ptr_gpu
         buf.extend_from_slice(&(-1_i32).to_le_bytes()); // ptr_cpu
 
-        let hed = LodMeshHeader::from_le_bytes(&buf).unwrap();
+        let hed = LodMeshHeader::from_le_unsized(&buf).unwrap();
         assert_eq!(buf, hed.to_le_bytes());
     }
 
@@ -687,7 +705,7 @@ mod tests {
         buf.extend_from_slice(&(-1_i32).to_le_bytes()); // ptr_08
         buf.extend_from_slice(&0_i32.to_le_bytes()); // unk_0c
 
-        let hed = MeshHeader::from_le_bytes(&buf).unwrap();
+        let hed = MeshHeader::from_le_unsized(&buf).unwrap();
         assert_eq!(buf, hed.to_le_bytes());
     }
 
@@ -701,7 +719,7 @@ mod tests {
         buf.extend_from_slice(&52_u16.to_le_bytes()); // num_indices
         buf.extend_from_slice(&7_i16.to_le_bytes()); // material
 
-        let hed = Surface::from_le_bytes(&buf).unwrap();
+        let hed = Surface::from_le_unsized(&buf).unwrap();
         assert_eq!(buf, hed.to_le_bytes());
     }
 
@@ -716,7 +734,7 @@ mod tests {
         buf.extend_from_slice(&(-1_i32).to_le_bytes()); // runtime_0c
         buf.extend_from_slice(&0_i32.to_le_bytes()); // runtime_10
 
-        let hed = IndexBuffer::from_le_bytes(&buf).unwrap();
+        let hed = IndexBuffer::from_le_unsized(&buf).unwrap();
         assert_eq!(buf, hed.to_le_bytes());
     }
 
@@ -731,7 +749,7 @@ mod tests {
         buf.extend_from_slice(&(-1_i32).to_le_bytes()); // ptr_render_data
         buf.extend_from_slice(&0_i32.to_le_bytes()); // unk_0c
 
-        let hed = VertexBuffer::from_le_bytes(&buf).unwrap();
+        let hed = VertexBuffer::from_le_unsized(&buf).unwrap();
         assert_eq!(buf, hed.to_le_bytes());
     }
 }
