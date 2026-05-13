@@ -230,6 +230,20 @@ impl MaterialsHeader {
             unknown_20,
         })
     }
+
+    pub fn to_le_bytes(&self) -> [u8; size_of::<Self>()] {
+        let mut bytes = [0; size_of::<Self>()];
+        bytes[0x00..0x04].copy_from_slice(&self.num_materials.to_le_bytes());
+        bytes[0x04..0x08].copy_from_slice(&0_u32.to_le_bytes());
+        bytes[0x08..0x0c].copy_from_slice(&0_u32.to_le_bytes());
+        bytes[0x0c..0x10].copy_from_slice(&0_u32.to_le_bytes());
+        bytes[0x10..0x14].copy_from_slice(&self.num_shader_consts.to_le_bytes());
+        bytes[0x14..0x18].copy_from_slice(&0_u32.to_le_bytes());
+        bytes[0x18..0x1c].copy_from_slice(&0_u32.to_le_bytes());
+        bytes[0x1c..0x20].copy_from_slice(&self.num_mat_unknown3.to_le_bytes());
+        bytes[0x20..0x24].copy_from_slice(&0_u32.to_le_bytes());
+        bytes
+    }
 }
 
 /// 1:1 from disk
@@ -283,6 +297,19 @@ impl Material {
             runtime_14,
         })
     }
+
+    pub fn to_le_bytes(&self) -> [u8; size_of::<Self>()] {
+        let mut bytes = [0; size_of::<Self>()];
+        bytes[0x00..0x04].copy_from_slice(&self.shader_hash.to_le_bytes());
+        bytes[0x04..0x08].copy_from_slice(&self.material_hash.to_le_bytes());
+        bytes[0x08..0x0c].copy_from_slice(&self.flags.to_le_bytes());
+        bytes[0x0c..0x0e].copy_from_slice(&self.num_unknown.to_le_bytes());
+        bytes[0x0e..0x10].copy_from_slice(&self.num_textures.to_le_bytes());
+        bytes[0x10..0x12].copy_from_slice(&self.unk_10.to_le_bytes());
+        bytes[0x12..0x14].copy_from_slice(&self.unk_12.to_le_bytes());
+        bytes[0x14..0x18].copy_from_slice(&self.runtime_14.to_le_bytes());
+        bytes
+    }
 }
 
 /// 1:1 from disk
@@ -321,6 +348,13 @@ impl MaterialTextureEntry {
             index: read_i16_le(buf, 0x0),
             flags: read_i16_le(buf, 0x2),
         })
+    }
+
+    pub fn to_le_bytes(&self) -> [u8; size_of::<Self>()] {
+        let mut bytes = [0; size_of::<Self>()];
+        bytes[0x00..0x02].copy_from_slice(&self.index.to_le_bytes());
+        bytes[0x02..0x04].copy_from_slice(&self.flags.to_le_bytes());
+        bytes
     }
 }
 
@@ -368,6 +402,16 @@ impl MaterialUnknown3 {
             ptr_08,
         })
     }
+
+    pub fn to_le_bytes(&self) -> [u8; size_of::<Self>()] {
+        let mut bytes = [0; size_of::<Self>()];
+        bytes[0x00..0x04].copy_from_slice(&self.unk_00.to_le_bytes());
+        bytes[0x04..0x08].copy_from_slice(&self.unk_04.to_le_bytes());
+        bytes[0x08..0x0a].copy_from_slice(&self.num_mat_unk4.to_le_bytes());
+        bytes[0x0a..0x0c].copy_from_slice(&self.unk_06.to_le_bytes());
+        bytes[0x0c..0x10].copy_from_slice(&(-1_i32).to_le_bytes());
+        bytes
+    }
 }
 
 #[cfg(test)]
@@ -381,12 +425,61 @@ mod tests {
     }
 
     #[test]
+    fn test_materials_header_cycle() {
+        let mut buf: Vec<u8> = vec![];
+
+        buf.extend_from_slice(&9_i32.to_le_bytes()); // num_materials
+        buf.extend_from_slice(&0_i32.to_le_bytes());
+        buf.extend_from_slice(&0_i32.to_le_bytes());
+        buf.extend_from_slice(&0_i32.to_le_bytes());
+        buf.extend_from_slice(&10_i32.to_le_bytes()); // num_shader_consts
+        buf.extend_from_slice(&0_i32.to_le_bytes());
+        buf.extend_from_slice(&0_i32.to_le_bytes());
+        buf.extend_from_slice(&11_i32.to_le_bytes()); // num_mat_unknown3
+        buf.extend_from_slice(&0_i32.to_le_bytes());
+
+        let hed = MaterialsHeader::from_le_unsized(&buf).unwrap();
+        assert_eq!(buf, hed.to_le_bytes());
+    }
+
+    #[test]
     fn test_material_size() {
         assert_eq!(size_of::<Material>(), 0x18);
     }
 
     #[test]
+    fn test_material_cycle() {
+        let mut buf: Vec<u8> = vec![];
+
+        buf.extend_from_slice(&0xba115101_u32.to_le_bytes());
+        buf.extend_from_slice(&0xb00bfee7_u32.to_le_bytes());
+        buf.extend_from_slice(&1_i32.to_le_bytes());
+        buf.extend_from_slice(&3_i16.to_le_bytes());
+        buf.extend_from_slice(&4_i16.to_le_bytes());
+        buf.extend_from_slice(&5_i16.to_le_bytes());
+        buf.extend_from_slice(&6_i16.to_le_bytes());
+        buf.extend_from_slice(&(-1_i32).to_le_bytes());
+
+        let hed = Material::from_le_unsized(&buf).unwrap();
+        assert_eq!(buf, hed.to_le_bytes());
+    }
+
+    #[test]
     fn test_material_unk3() {
         assert_eq!(size_of::<MaterialUnknown3>(), 0x10);
+    }
+
+    #[test]
+    fn test_material_unk3_cycle() {
+        let mut buf: Vec<u8> = vec![];
+
+        buf.extend_from_slice(&1_i32.to_le_bytes());
+        buf.extend_from_slice(&2_i32.to_le_bytes());
+        buf.extend_from_slice(&3_i16.to_le_bytes());
+        buf.extend_from_slice(&4_i16.to_le_bytes());
+        buf.extend_from_slice(&(-1_i32).to_le_bytes());
+
+        let hed = MaterialUnknown3::from_le_unsized(&buf).unwrap();
+        assert_eq!(buf, hed.to_le_bytes());
     }
 }
