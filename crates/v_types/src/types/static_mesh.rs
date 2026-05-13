@@ -57,7 +57,7 @@ impl StaticMesh {
         if num_navpoints > 0 {
             align(data_offset, 16);
             for _ in 0..num_navpoints {
-                navpoints.push(StaticMeshNavpoint::from_data(&buf[*data_offset..])?);
+                navpoints.push(StaticMeshNavpoint::from_le_unsized(&buf[*data_offset..])?);
                 *data_offset += size_of::<StaticMeshNavpoint>();
             }
         }
@@ -339,6 +339,25 @@ impl StaticMeshHeader {
             unk_2c,
         })
     }
+
+    pub fn to_le_bytes(&self) -> [u8; size_of::<Self>()] {
+        let mut bytes = [0; size_of::<Self>()];
+
+        bytes[0x00..0x04].copy_from_slice(&Self::SIGNATURE.to_le_bytes());
+        bytes[0x04..0x06].copy_from_slice(&Self::VERSION.to_le_bytes());
+        bytes[0x06..0x08].copy_from_slice(&self.mesh_flags.to_le_bytes());
+        bytes[0x08..0x0c].copy_from_slice(&self.unk_08.to_le_bytes());
+        bytes[0x0c..0x0e].copy_from_slice(&self.num_textures.to_le_bytes());
+        bytes[0x0e..0x10].copy_from_slice(&self.num_navpoints.to_le_bytes());
+        bytes[0x10..0x14].copy_from_slice(&self.unk_10.to_le_bytes());
+        bytes[0x14..0x20].copy_from_slice(&self.bounding_center.to_le_bytes());
+        bytes[0x20..0x24].copy_from_slice(&self.bounding_radius.to_le_bytes());
+        bytes[0x24..0x28].copy_from_slice(&self.num_bones.to_le_bytes());
+        bytes[0x28..0x2c].copy_from_slice(&self.unk_28.to_le_bytes());
+        bytes[0x2c..0x30].copy_from_slice(&self.unk_2c.to_le_bytes());
+
+        bytes
+    }
 }
 
 /// 1:1 from disk
@@ -348,7 +367,7 @@ impl StaticMeshHeader {
 #[repr(C)]
 pub struct StaticMeshNavpoint {
     /// name to reference nav point by
-    pub name: [u8; Self::MAX_NAME_LENGTH],
+    pub name: [u8; 64],
     /// vid this navp is attached to.
     pub vid: i32,
     /// position of navpoint in object coords
@@ -358,16 +377,27 @@ pub struct StaticMeshNavpoint {
 }
 
 impl StaticMeshNavpoint {
-    pub const MAX_NAME_LENGTH: usize = 64;
-
-    pub fn from_data(buf: &[u8]) -> Result<Self, VolitionError> {
+    pub fn from_le_unsized(buf: &[u8]) -> Result<Self, VolitionError> {
         check_fits_buf::<Self>(buf)?;
+        Self::from_le_bytes(buf[..size_of::<Self>()].try_into().unwrap())
+    }
+
+    pub fn from_le_bytes(buf: &[u8; size_of::<Self>()]) -> Result<Self, VolitionError> {
         Ok(Self {
             name: read_bytes(buf, 0x0),
-            vid: read_i32_le(buf, Self::MAX_NAME_LENGTH),
-            pos: Vector::from_le_unsized(&buf[Self::MAX_NAME_LENGTH + 4..])?,
-            orient: Quaternion::from_le_unsized(&buf[Self::MAX_NAME_LENGTH + 16..])?,
+            vid: read_i32_le(buf, 0x40),
+            pos: Vector::from_le_unsized(&buf[0x44..])?,
+            orient: Quaternion::from_le_unsized(&buf[0x50..])?,
         })
+    }
+
+    pub fn to_le_bytes(&self) -> [u8; size_of::<Self>()] {
+        let mut bytes = [0; size_of::<Self>()];
+        bytes[0x00..0x40].copy_from_slice(&self.name);
+        bytes[0x40..0x44].copy_from_slice(&self.vid.to_le_bytes());
+        bytes[0x44..0x50].copy_from_slice(&self.pos.to_le_bytes());
+        bytes[0x50..].copy_from_slice(&self.orient.to_le_bytes());
+        bytes
     }
 
     pub fn name(&self) -> Result<&str, VolitionError> {
@@ -381,6 +411,47 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
+
+    #[test]
+    fn test_header_cycle_bytes() {
+        let mut buf = vec![];
+
+        buf.extend_from_slice(&StaticMeshHeader::SIGNATURE.to_le_bytes());
+        buf.extend_from_slice(&StaticMeshHeader::VERSION.to_le_bytes());
+        buf.extend_from_slice(&4_i16.to_le_bytes()); // mesh_flags
+        buf.extend_from_slice(&5_i32.to_le_bytes()); // unk_08
+        buf.extend_from_slice(&6_i16.to_le_bytes()); // num_textures
+        buf.extend_from_slice(&7_i16.to_le_bytes()); // num_navpoints
+        buf.extend_from_slice(&7_i32.to_le_bytes()); // unk_10
+        buf.extend_from_slice(&3.0_f32.to_le_bytes()); // pos
+        buf.extend_from_slice(&4.0_f32.to_le_bytes());
+        buf.extend_from_slice(&5.0_f32.to_le_bytes());
+        buf.extend_from_slice(&6.0_f32.to_le_bytes()); // radius
+        buf.extend_from_slice(&7_u32.to_le_bytes()); // num_bones
+        buf.extend_from_slice(&8_i32.to_le_bytes()); // unk_28
+        buf.extend_from_slice(&2_i32.to_le_bytes()); // unk_2c
+
+        let hed = StaticMeshHeader::from_le_unsized(&buf).unwrap();
+        assert_eq!(buf, hed.to_le_bytes());
+    }
+
+    #[test]
+    fn test_navpoint_cycle_bytes() {
+        let mut buf = vec![];
+
+        buf.extend_from_slice(&[67_u8; 64]);
+        buf.extend_from_slice(&0_i32.to_le_bytes());
+        buf.extend_from_slice(&3.0_f32.to_le_bytes());
+        buf.extend_from_slice(&4.0_f32.to_le_bytes());
+        buf.extend_from_slice(&5.0_f32.to_le_bytes());
+        buf.extend_from_slice(&(-5.0_f32).to_le_bytes());
+        buf.extend_from_slice(&(-5.0_f32).to_le_bytes());
+        buf.extend_from_slice(&(-5.0_f32).to_le_bytes());
+        buf.extend_from_slice(&(-5.0_f32).to_le_bytes());
+
+        let hed = StaticMeshNavpoint::from_le_unsized(&buf).unwrap();
+        assert_eq!(buf, hed.to_le_bytes());
+    }
 
     #[test]
     fn test_parse_every_smesh() {
