@@ -78,14 +78,15 @@ impl StaticMesh {
         *data_offset += size_of::<LodMeshHeader>();
 
         let unk_20b = if header.unk_2c != 0 {
-            let u = read_bytes(&buf, *data_offset);
+            let u = read_bytes(buf, *data_offset);
             *data_offset += 20;
             Some(u)
         } else {
             None
         };
 
-        let lod_meshes = mesh_header.read_data(buf, data_offset)?;
+        let ret = mesh_header.read_meshes(buf, data_offset)?;
+        let lod_meshes = mesh_header.read_data(buf, data_offset, ret)?;
 
         Ok(Self {
             header,

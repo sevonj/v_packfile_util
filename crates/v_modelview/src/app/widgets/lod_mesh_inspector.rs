@@ -128,7 +128,7 @@ fn lods_ui(ui: &mut egui::Ui, meshes: &[LodMeshData]) {
 }
 
 fn geom_ui(ui: &mut egui::Ui, data: &Mesh) {
-    geom_header_ui(ui, &data.surface_header);
+    geom_header_ui(ui, &data.header);
 
     CollapsingHeader::new("Surfaces")
         .default_open(true)

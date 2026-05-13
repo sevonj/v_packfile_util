@@ -99,16 +99,20 @@ impl LodMeshHeader {
         self.ptr_cpu == -1
     }
 
-    pub(crate) fn read_data(
+    #[allow(clippy::type_complexity)]
+    pub fn read_meshes(
         &self,
         buf: &[u8],
         data_offset: &mut usize,
-    ) -> Result<Vec<LodMeshData>, VolitionError> {
+    ) -> Result<
+        Vec<(
+            (MeshHeader, Vec<Surface>),
+            Option<(MeshHeader, Vec<Surface>)>,
+        )>,
+        VolitionError,
+    > {
         align(data_offset, 16);
-
         let num_lods = self.num_lods as usize;
-
-        let mut meshes: Vec<LodMeshData> = Vec::with_capacity(num_lods);
 
         let mut gpu_headers = Vec::with_capacity(num_lods);
         for _ in 0..num_lods {
@@ -159,6 +163,23 @@ impl LodMeshHeader {
             ret.push((g, c));
         }
 
+        Ok(ret)
+    }
+
+    #[allow(clippy::type_complexity)]
+    pub fn read_data(
+        &self,
+        buf: &[u8],
+        data_offset: &mut usize,
+        ret: Vec<(
+            (MeshHeader, Vec<Surface>),
+            Option<(MeshHeader, Vec<Surface>)>,
+        )>,
+    ) -> Result<Vec<LodMeshData>, VolitionError> {
+        let num_lods = self.num_lods as usize;
+
+        let mut meshes: Vec<LodMeshData> = Vec::with_capacity(num_lods);
+
         for (gdata, cdata) in ret {
             let gpu = {
                 let (surface_header, surfaces) = gdata;
@@ -183,7 +204,7 @@ impl LodMeshHeader {
                 }
 
                 Mesh {
-                    surface_header,
+                    header: surface_header,
                     surfaces,
                     index_header,
                     vertex_headers,
@@ -252,7 +273,7 @@ impl LodMeshHeader {
                 }
 
                 Some(Mesh {
-                    surface_header,
+                    header: surface_header,
                     surfaces,
                     index_header,
                     vertex_headers,
@@ -296,7 +317,7 @@ impl LodMeshHeader {
 /// Deserialized
 #[derive(Debug, Clone)]
 pub struct Mesh {
-    pub surface_header: MeshHeader,
+    pub header: MeshHeader,
     pub surfaces: Vec<Surface>,
     pub index_header: IndexBuffer,
     pub vertex_headers: Vec<VertexBuffer>,
@@ -310,7 +331,7 @@ pub struct MeshHeader {
     pub num_surfaces: u16,
     /// Always -1
     pub ptr_04: i32,
-    /// Always -1
+    /// Always 0 | -1
     pub ptr_08: i32,
     /// Always 0
     pub unk_0c: i32,
@@ -339,10 +360,9 @@ impl MeshHeader {
         }
 
         let ptr_08 = read_i32_le(buf, 0x8);
-        if ptr_08 != -1 {
-            return Err(VolitionError::ExpectedExactValue {
-                field: "GeometryHeader::unk_08",
-                expected: -1,
+        if ![0, -1].contains(&ptr_08) {
+            return Err(VolitionError::UnexpectedValue {
+                desc: "GeometryHeader::unk_08  should be either -1 or 0",
                 got: ptr_08,
             });
         }
