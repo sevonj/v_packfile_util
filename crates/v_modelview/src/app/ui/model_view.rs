@@ -31,15 +31,15 @@ const INSPECTOR_W: f32 = 300.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ViewMode {
-    Gpu,
-    Cpu,
+    Render,
+    Shadow,
 }
 
 impl std::fmt::Display for ViewMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ViewMode::Gpu => write!(f, "GPU"),
-            ViewMode::Cpu => write!(f, "CPU"),
+            ViewMode::Render => write!(f, "Render"),
+            ViewMode::Shadow => write!(f, "Shadow"),
         }
     }
 }
@@ -84,7 +84,7 @@ impl ModelView {
             camera_pos,
             last_instant: Instant::now(),
             last_touch: Instant::now() - Duration::from_secs(SPIN_ENABLE_DELAY),
-            view_mode: ViewMode::Gpu,
+            view_mode: ViewMode::Render,
             show_bbox: true,
             show_origin: false,
             visible_lod: 0,
@@ -118,14 +118,14 @@ impl ModelView {
         let model = Mat4::from_rotation_y(self.angle_y);
         let light = Vec3::new(1.0, -1.0, 1.0);
 
-        if model_data.smesh.mesh_header.has_cpu_geometry() {
+        if model_data.smesh.mesh_header.has_shadow_meshes() {
             ui.painter().add(egui_wgpu::Callback::new_paint_callback(
                 rect,
                 StaticMeshCallback {
                     view: proj * view * model,
                     light,
-                    show_gpu_geom: self.view_mode == ViewMode::Gpu,
-                    show_cpu_geom: self.view_mode == ViewMode::Cpu,
+                    show_render: self.view_mode == ViewMode::Render,
+                    show_shadow: self.view_mode == ViewMode::Shadow,
                     show_bbox: self.show_bbox,
                     show_origin: self.show_origin,
                     visible_lod: self.visible_lod,
@@ -284,19 +284,19 @@ impl ModelView {
                                                 }
                                             });
 
-                                        ComboBox::from_id_salt("gpu/cpu")
+                                        ComboBox::from_id_salt("lod/shadow")
                                             .selected_text(self.view_mode.to_string())
                                             .width(36.0)
                                             .show_ui(ui, |ui| {
                                                 ui.selectable_value(
                                                     &mut self.view_mode,
-                                                    ViewMode::Cpu,
-                                                    ViewMode::Cpu.to_string(),
+                                                    ViewMode::Shadow,
+                                                    ViewMode::Shadow.to_string(),
                                                 );
                                                 ui.selectable_value(
                                                     &mut self.view_mode,
-                                                    ViewMode::Gpu,
-                                                    ViewMode::Gpu.to_string(),
+                                                    ViewMode::Render,
+                                                    ViewMode::Render.to_string(),
                                                 );
                                             });
                                     });
@@ -305,7 +305,7 @@ impl ModelView {
                     });
 
                 match self.view_mode {
-                    ViewMode::Gpu => {
+                    ViewMode::Render => {
                         if model_data.g_smesh.is_none() {
                             ui.add(StatusPage::new(
                                 "Couldn't Load GPU File",
@@ -313,10 +313,10 @@ impl ModelView {
                             ));
                         }
                     }
-                    ViewMode::Cpu => {
-                        if !model_data.smesh.mesh_header.has_cpu_geometry() {
+                    ViewMode::Shadow => {
+                        if !model_data.smesh.mesh_header.has_shadow_meshes() {
                             ui.add(StatusPage::new(
-                                "Model Has No CPU Geometry",
+                                "Model Has No Shadow Mesh",
                                 "Nothing to show",
                             ));
                         }

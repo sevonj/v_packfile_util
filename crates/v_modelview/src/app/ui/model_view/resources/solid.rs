@@ -14,13 +14,13 @@ pub struct SolidUniforms {
     pub _pad: f32,
 }
 
-pub struct CpuMesh {
+pub struct ShadowMesh {
     pub vbufs: Vec<wgpu::Buffer>,
     pub ibuf: wgpu::Buffer,
     pub surfaces: Vec<v_types::Surface>,
 }
 
-pub const fn cpu_vbuf_layout(
+pub const fn shadow_vbuf_layout(
     vertex_header: &v_types::VertexBuffer,
 ) -> wgpu::VertexBufferLayout<'_> {
     wgpu::VertexBufferLayout {
@@ -32,7 +32,7 @@ pub const fn cpu_vbuf_layout(
 
 pub fn solid_bgl(device: &wgpu::Device) -> wgpu::BindGroupLayout {
     device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some("static_mesh_cpu_bgl"),
+        label: Some("smesh_shadow_bgl"),
         entries: &[wgpu::BindGroupLayoutEntry {
             binding: 0,
             visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
@@ -48,7 +48,7 @@ pub fn solid_bgl(device: &wgpu::Device) -> wgpu::BindGroupLayout {
 
 pub fn solid_uniform_buf(device: &wgpu::Device) -> wgpu::Buffer {
     device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("static_mesh_cpu_uniforms"),
+        label: Some("smesh_shadow_uniforms"),
         size: std::mem::size_of::<SolidUniforms>() as u64,
         usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         mapped_at_creation: false,
@@ -61,7 +61,7 @@ pub fn solid_bind_group(
     device: &wgpu::Device,
 ) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("static_mesh_cpu_bg"),
+        label: Some("smesh_shadow_bg"),
         layout: bgl,
         entries: &[wgpu::BindGroupEntry {
             binding: 0,
@@ -70,46 +70,46 @@ pub fn solid_bind_group(
     })
 }
 
-pub fn cpu_geom_pipelines(
+pub fn shadow_pipelines(
     render_state: &egui_wgpu::RenderState,
     smesh: &v_types::StaticMesh,
     bgl: &wgpu::BindGroupLayout,
 ) -> HashMap<u16, wgpu::RenderPipeline> {
     let device = &render_state.device;
 
-    let shader_cpu = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some("static_mesh_cpu_shad"),
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("smesh_shadow_shad"),
         source: wgpu::ShaderSource::Wgsl(SHADER.into()),
     });
 
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some("static_mesh_cpu_layout"),
+        label: Some("smesh_shadow_layout"),
         bind_group_layouts: &[Some(bgl)],
         immediate_size: 0,
     });
 
-    let mut cpu_pipelines: HashMap<u16, wgpu::RenderPipeline> = HashMap::new();
-    for mesh in smesh.lod_meshes.iter().filter(|s| s.cpu_geometry.is_some()) {
-        let geometry = mesh.cpu_geometry.as_ref().unwrap();
+    let mut pipelines: HashMap<u16, wgpu::RenderPipeline> = HashMap::new();
+    for mesh in smesh.lod_meshes.iter().filter(|s| s.shadow_mesh.is_some()) {
+        let geometry = mesh.shadow_mesh.as_ref().unwrap();
 
         for surf in &geometry.surfaces {
-            if cpu_pipelines.contains_key(&surf.material) {
+            if pipelines.contains_key(&surf.material) {
                 continue;
             }
             let vertex_header = geometry.vertex_headers.get(surf.vbuf as usize).unwrap();
-            cpu_pipelines.insert(
+            pipelines.insert(
                 surf.material,
                 device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                    label: Some("static_mesh_cpu_pipeline"),
+                    label: Some("smesh_shadow_pipeline"),
                     layout: Some(&pipeline_layout),
                     vertex: wgpu::VertexState {
-                        module: &shader_cpu,
+                        module: &shader,
                         entry_point: Some("vs_main"),
                         compilation_options: wgpu::PipelineCompilationOptions::default(),
-                        buffers: &[cpu_vbuf_layout(vertex_header)],
+                        buffers: &[shadow_vbuf_layout(vertex_header)],
                     },
                     fragment: Some(wgpu::FragmentState {
-                        module: &shader_cpu,
+                        module: &shader,
                         entry_point: Some("fs_main"),
                         compilation_options: wgpu::PipelineCompilationOptions::default(),
                         targets: &[Some(wgpu::ColorTargetState {
@@ -138,27 +138,27 @@ pub fn cpu_geom_pipelines(
             );
         }
     }
-    cpu_pipelines
+    pipelines
 }
 
-pub fn cpu_geom_lods(device: &wgpu::Device, smesh: &v_types::StaticMesh) -> Vec<CpuMesh> {
+pub fn shadow_lods(device: &wgpu::Device, smesh: &v_types::StaticMesh) -> Vec<ShadowMesh> {
     smesh
         .lod_meshes
         .iter()
-        .filter(|s: &&v_types::LodMeshData| s.cpu_geometry.is_some())
+        .filter(|s: &&v_types::LodMeshData| s.shadow_mesh.is_some())
         .map(|s| {
-            let cpu_data: &v_types::Mesh = s.cpu_geometry.as_ref().unwrap();
+            let mesh: &v_types::Mesh = s.shadow_mesh.as_ref().unwrap();
 
             let mut offset = 0;
-            let vbufs = cpu_data
+            let vbufs = mesh
                 .vertex_headers
                 .iter()
                 .map(|h| {
                     let byte_len = h.num_vertices as usize * h.stride as usize;
-                    let slice = &s.cpu_vdata[offset..offset + byte_len];
+                    let slice = &s.shadow_vbuf[offset..offset + byte_len];
                     offset += byte_len;
                     device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("cpu_vbuf"),
+                        label: Some("shadow_vbuf"),
                         contents: slice,
                         usage: wgpu::BufferUsages::VERTEX,
                     })
@@ -166,15 +166,15 @@ pub fn cpu_geom_lods(device: &wgpu::Device, smesh: &v_types::StaticMesh) -> Vec<
                 .collect();
 
             let ibuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("cpu_ibuf"),
-                contents: &s.cpu_idata,
+                label: Some("shadow_ibuf"),
+                contents: &s.shadow_ibuf,
                 usage: wgpu::BufferUsages::INDEX,
             });
 
-            CpuMesh {
+            ShadowMesh {
                 vbufs,
                 ibuf,
-                surfaces: cpu_data.surfaces.clone(),
+                surfaces: mesh.surfaces.clone(),
             }
         })
         .collect()

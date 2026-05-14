@@ -23,7 +23,7 @@ pub fn wframe_pipeline(render_state: &egui_wgpu::RenderState) -> wgpu::RenderPip
     });
 
     let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some("static_mesh_cpu_bgl"),
+        label: Some("wireframe_bgl"),
         entries: &[wgpu::BindGroupLayoutEntry {
             binding: 0,
             visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
@@ -37,13 +37,13 @@ pub fn wframe_pipeline(render_state: &egui_wgpu::RenderState) -> wgpu::RenderPip
     });
 
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some("static_mesh_cpu_layout"),
+        label: Some("wireframe_layout"),
         bind_group_layouts: &[Some(&bgl)],
         immediate_size: 0,
     });
 
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("aabb_pipeline"),
+        label: Some("wireframe_pipeline"),
         layout: Some(&pipeline_layout),
         vertex: wgpu::VertexState {
             module: &wframe_shader,

@@ -153,7 +153,7 @@ impl VModelViewer {
         self.model_view = None;
     }
 
-    fn prompt_dump_cpu(&mut self, separate_surfaces: bool) {
+    fn prompt_dump_wavefront(&mut self, separate_surfaces: bool) {
         let Some(model_data) = &self.model_data else {
             return;
         };

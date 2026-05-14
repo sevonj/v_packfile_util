@@ -64,7 +64,7 @@ impl VModelViewer {
                 .on_hover_text("Very lossy.")
                 .clicked()
             {
-                self.prompt_dump_cpu(false);
+                self.prompt_dump_wavefront(false);
             }
 
             if ui
@@ -72,7 +72,7 @@ impl VModelViewer {
                 .on_hover_text("Very lossy. Export each surface as a separate object.")
                 .clicked()
             {
-                self.prompt_dump_cpu(true);
+                self.prompt_dump_wavefront(true);
             }
 
             ui.separator();

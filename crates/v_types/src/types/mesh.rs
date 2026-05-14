@@ -12,20 +12,20 @@ pub const V_ATTR_FLAG_UNK: u8 = 4; // maybe morph
 /// Deserialized
 #[derive(Debug, Clone)]
 pub struct LodMeshData {
-    /// Headers for geometry that lives in VRAM
-    pub gpu_geometry: Mesh,
-    /// Headers for geometry that lives in CPU RAM
-    /// Purpose unknown, sometimes not present
-    /// Always has exactly one vertex buffer
-    /// Never has UV channels. Only possible extra attribute is bones.
-    /// If exists, number of surfaces matches gpu data
-    pub cpu_geometry: Option<Mesh>,
-    /// CPU vertex buffer in raw bytes. Empty if `cpu` == `None`
+    /// Headers for rendered geometry that lives in VRAM
+    pub mesh: Mesh,
+    /// Headers for shadow geometry, which lives in work RAM
+    /// If a model uses shadow meshes, every lod has it.
+    /// Number of surfaces matches rendered surfaces within the same lod.
+    /// Always has exactly one vertex buffer.
+    /// Only possible attribute is bones.
+    pub shadow_mesh: Option<Mesh>,
+    /// Shadow vertex buffer. Empty if no shadows.
     /// Format is always 3xf32 coords only
-    pub cpu_vdata: Vec<u8>,
-    /// CPU index buffer in raw bytes. Empty if `cpu` == `None`
+    pub shadow_vbuf: Vec<u8>,
+    /// Shadow index buffer. Empty if no shadows.
     /// Format is always u16 tri-strip
-    pub cpu_idata: Vec<u8>,
+    pub shadow_ibuf: Vec<u8>,
 }
 
 /// 1:1 from disk
@@ -36,8 +36,10 @@ pub struct LodMeshHeader {
     pub bbox: AABB,
     pub flags: i32,
     pub num_lods: u32,
-    pub ptr_gpu: i32,
-    pub ptr_cpu: i32,
+    /// Always -1
+    pub ptr_geometry: i32,
+    /// -1 if shadows, 0 if no shadows
+    pub ptr_shadow_geometry: i32,
 }
 
 impl LodMeshHeader {
@@ -63,20 +65,20 @@ impl LodMeshHeader {
             });
         }
 
-        let ptr_gpu = read_i32_le(buf, 0x20);
-        if ptr_gpu != -1 {
+        let ptr_geometry = read_i32_le(buf, 0x20);
+        if ptr_geometry != -1 {
             return Err(VolitionError::ExpectedExactValue {
-                field: "MeshHeader::ptr_gpu",
+                field: "MeshHeader::ptr_geometry",
                 expected: -1,
-                got: ptr_gpu,
+                got: ptr_geometry,
             });
         }
 
-        let ptr_cpu = read_i32_le(buf, 0x24);
-        if ![0, -1].contains(&ptr_cpu) {
+        let ptr_shadow_geometry = read_i32_le(buf, 0x24);
+        if ![0, -1].contains(&ptr_shadow_geometry) {
             return Err(VolitionError::UnexpectedValue {
-                desc: "MeshHeader::ptr_cpu should be either -1 or 0",
-                got: ptr_cpu,
+                desc: "MeshHeader::ptr_shadow_geometry should be either -1 or 0",
+                got: ptr_shadow_geometry,
             });
         }
 
@@ -84,8 +86,8 @@ impl LodMeshHeader {
             bbox: AABB::from_le_unsized(buf)?,
             flags: read_i32_le(buf, 0x18),
             num_lods,
-            ptr_gpu,
-            ptr_cpu,
+            ptr_geometry,
+            ptr_shadow_geometry,
         })
     }
 
@@ -94,13 +96,13 @@ impl LodMeshHeader {
         bytes[0x00..0x18].copy_from_slice(&self.bbox.to_le_bytes());
         bytes[0x18..0x1c].copy_from_slice(&self.flags.to_le_bytes());
         bytes[0x1c..0x20].copy_from_slice(&self.num_lods.to_le_bytes());
-        bytes[0x20..0x24].copy_from_slice(&self.ptr_gpu.to_le_bytes());
-        bytes[0x24..0x28].copy_from_slice(&self.ptr_cpu.to_le_bytes());
+        bytes[0x20..0x24].copy_from_slice(&self.ptr_geometry.to_le_bytes());
+        bytes[0x24..0x28].copy_from_slice(&self.ptr_shadow_geometry.to_le_bytes());
         bytes
     }
 
-    pub const fn has_cpu_geometry(&self) -> bool {
-        self.ptr_cpu == -1
+    pub const fn has_shadow_meshes(&self) -> bool {
+        self.ptr_shadow_geometry == -1
     }
 
     #[allow(clippy::type_complexity)]
@@ -118,13 +120,13 @@ impl LodMeshHeader {
         align(data_offset, 16);
         let num_lods = self.num_lods as usize;
 
-        let mut gpu_headers = Vec::with_capacity(num_lods);
+        let mut render_headers = Vec::with_capacity(num_lods);
         for _ in 0..num_lods {
-            gpu_headers.push(MeshHeader::from_le_unsized(&buf[*data_offset..])?);
+            render_headers.push(MeshHeader::from_le_unsized(&buf[*data_offset..])?);
             *data_offset += size_of::<MeshHeader>();
         }
 
-        let cpu_headers = if self.has_cpu_geometry() {
+        let shadow_headers = if self.has_shadow_meshes() {
             let mut headers = Vec::with_capacity(num_lods);
             for _ in 0..num_lods {
                 headers.push(Some(MeshHeader::from_le_unsized(&buf[*data_offset..])?));
@@ -135,8 +137,8 @@ impl LodMeshHeader {
             vec![None; num_lods]
         };
 
-        assert_eq!(gpu_headers.len(), num_lods);
-        assert_eq!(cpu_headers.len(), num_lods);
+        assert_eq!(render_headers.len(), num_lods);
+        assert_eq!(shadow_headers.len(), num_lods);
 
         #[allow(clippy::type_complexity)]
         let mut ret: Vec<(
@@ -144,7 +146,7 @@ impl LodMeshHeader {
             Option<(MeshHeader, Vec<Surface>)>,
         )> = Vec::with_capacity(num_lods);
 
-        for (ghead, chead) in gpu_headers.into_iter().zip(cpu_headers) {
+        for (ghead, chead) in render_headers.into_iter().zip(shadow_headers) {
             let g_surfs = ghead.read_surfaces(buf, data_offset)?;
             let g = (ghead, g_surfs);
 
@@ -153,7 +155,7 @@ impl LodMeshHeader {
                 for surf in &surfaces {
                     if surf.vbuf != 0 {
                         return Err(VolitionError::ExpectedExactValue {
-                            field: "Surface::vbuf (cpu)",
+                            field: "Surface::vbuf (shadow mesh)",
                             expected: 0,
                             got: surf.vbuf as i32,
                         });
@@ -185,7 +187,7 @@ impl LodMeshHeader {
         let mut meshes: Vec<LodMeshData> = Vec::with_capacity(num_lods);
 
         for (gdata, cdata) in ret {
-            let gpu = {
+            let mesh = {
                 let (surface_header, surfaces) = gdata;
 
                 align(data_offset, 4);
@@ -195,7 +197,7 @@ impl LodMeshHeader {
 
                 if index_header.mesh_type != 0 {
                     return Err(VolitionError::ExpectedExactValue {
-                        field: "MeshData::mesh_type (gpu)",
+                        field: "MeshData::mesh_type",
                         expected: 0,
                         got: index_header.mesh_type as i32,
                     });
@@ -215,14 +217,14 @@ impl LodMeshHeader {
                 }
             };
 
-            let cpu = if let Some((surface_header, surfaces)) = cdata {
+            let shadow_mesh = if let Some((surface_header, surfaces)) = cdata {
                 align(data_offset, 4);
                 let index_header = IndexBuffer::from_le_unsized(&buf[*data_offset..])?;
 
                 let num_vertex_buffers = index_header.num_vertex_buffers as usize;
                 if num_vertex_buffers != 1 {
                     return Err(VolitionError::ExpectedExactValue {
-                        field: "IndexBufferHeader::num_vertex_buffers (cpu)",
+                        field: "IndexBufferHeader::num_vertex_buffers (shadow mesh)",
                         expected: 1,
                         got: num_vertex_buffers as i32,
                     });
@@ -232,7 +234,7 @@ impl LodMeshHeader {
 
                 if index_header.mesh_type != 7 {
                     return Err(VolitionError::ExpectedExactValue {
-                        field: "MeshData::mesh_type (cpu)",
+                        field: "MeshData::mesh_type (shadow mesh)",
                         expected: 7,
                         got: index_header.mesh_type as i32,
                     });
@@ -240,7 +242,7 @@ impl LodMeshHeader {
 
                 if index_header.num_vertex_buffers != 1 {
                     return Err(VolitionError::ExpectedExactValue {
-                        field: "IndexBufferHeader::num_vertex_buffers (cpu)",
+                        field: "IndexBufferHeader::num_vertex_buffers (shadow mesh)",
                         expected: 1,
                         got: index_header.num_vertex_buffers as i32,
                     });
@@ -252,21 +254,21 @@ impl LodMeshHeader {
 
                     if vertex_header.has_normals() {
                         return Err(VolitionError::UnexpectedValue {
-                            desc: "VertexBufferHeader::attributes shouldn't have normals (cpu)",
+                            desc: "VertexBufferHeader::attributes shouldn't have normals (shadow mesh)",
                             got: vertex_header.attributes as i32,
                         });
                     }
 
                     if vertex_header.has_unk_attr() {
                         return Err(VolitionError::UnexpectedValue {
-                            desc: "VertexBufferHeader::attributes shouldn't have unk_attr (cpu)",
+                            desc: "VertexBufferHeader::attributes shouldn't have unk_attr (shadow mesh)",
                             got: vertex_header.attributes as i32,
                         });
                     }
 
                     if vertex_header.num_uv_channels != 0 {
                         return Err(VolitionError::ExpectedExactValue {
-                            field: "VertexBufferHeader::num_uvs (cpu)",
+                            field: "VertexBufferHeader::num_uvs (shadow mesh)",
                             expected: 0,
                             got: vertex_header.num_uv_channels as i32,
                         });
@@ -286,32 +288,32 @@ impl LodMeshHeader {
                 None
             };
 
-            let (cpu_vdata, cpu_idata) = if let Some(geom) = &cpu {
-                let num_indices = geom.index_header.num_indices as usize;
+            let (shadow_vbuf, shadow_ibuf) = if let Some(mesh) = &shadow_mesh {
+                let num_indices = mesh.index_header.num_indices as usize;
 
                 align(data_offset, 16);
-                let mut len_cpu_vdata = 0;
-                for vhead in &geom.vertex_headers {
-                    len_cpu_vdata += vhead.num_vertices as usize * vhead.stride as usize;
-                    align(&mut len_cpu_vdata, 16);
+                let mut len_shadow_vbuf = 0;
+                for vhead in &mesh.vertex_headers {
+                    len_shadow_vbuf += vhead.num_vertices as usize * vhead.stride as usize;
+                    align(&mut len_shadow_vbuf, 16);
                 }
-                let cpu_vdata = buf[*data_offset..(*data_offset + len_cpu_vdata)].to_vec();
-                *data_offset += len_cpu_vdata;
+                let shadow_vbuf = buf[*data_offset..(*data_offset + len_shadow_vbuf)].to_vec();
+                *data_offset += len_shadow_vbuf;
 
-                let len_cpu_idata = num_indices * 2;
-                let cpu_idata = buf[*data_offset..(*data_offset + len_cpu_idata)].to_vec();
-                *data_offset += len_cpu_idata;
+                let len_shadow_ibuf = num_indices * 2;
+                let shadow_ibuf = buf[*data_offset..(*data_offset + len_shadow_ibuf)].to_vec();
+                *data_offset += len_shadow_ibuf;
 
-                (cpu_vdata, cpu_idata)
+                (shadow_vbuf, shadow_ibuf)
             } else {
                 (vec![], vec![])
             };
 
             meshes.push(LodMeshData {
-                gpu_geometry: gpu,
-                cpu_geometry: cpu,
-                cpu_vdata,
-                cpu_idata,
+                mesh,
+                shadow_mesh,
+                shadow_vbuf,
+                shadow_ibuf,
             });
         }
         Ok(meshes)
@@ -688,8 +690,8 @@ mod tests {
 
         buf.extend_from_slice(&0_i32.to_le_bytes()); // flags
         buf.extend_from_slice(&4_i32.to_le_bytes()); // num_lods
-        buf.extend_from_slice(&(-1_i32).to_le_bytes()); // ptr_gpu
-        buf.extend_from_slice(&(-1_i32).to_le_bytes()); // ptr_cpu
+        buf.extend_from_slice(&(-1_i32).to_le_bytes()); // ptr_geom
+        buf.extend_from_slice(&(-1_i32).to_le_bytes()); // ptr_shadow
 
         let hed = LodMeshHeader::from_le_unsized(&buf).unwrap();
         assert_eq!(buf, hed.to_le_bytes());

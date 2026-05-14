@@ -100,10 +100,10 @@ impl ModelData {
             return;
         }
 
-        if !has_shadow_lods && new_smesh.mesh_header.has_cpu_geometry() {
+        if !has_shadow_lods && new_smesh.mesh_header.has_shadow_meshes() {
             println!("ERROR: GLTF doesn't have shadow lods, but target does.");
             return;
-        } else if has_shadow_lods && !new_smesh.mesh_header.has_cpu_geometry() {
+        } else if has_shadow_lods && !new_smesh.mesh_header.has_shadow_meshes() {
             println!("ERROR: GLTF has shadow lods, but target doesn't.");
             return;
         }
@@ -124,7 +124,7 @@ impl ModelData {
         let mut new_g_smesh = vec![];
         for (i, lod_mesh) in new_smesh.lod_meshes.iter_mut().enumerate() {
             {
-                let tgt_mesh = &mut lod_mesh.gpu_geometry;
+                let tgt_mesh = &mut lod_mesh.mesh;
                 if tgt_mesh.surfaces.len() != 1 {
                     println!(
                         "ERROR: Target mesh has {} surfs. Only 1 is supported.",
@@ -173,7 +173,7 @@ impl ModelData {
             }
 
             if has_shadow_lods {
-                let tgt_mesh = lod_mesh.cpu_geometry.as_mut().unwrap();
+                let tgt_mesh = lod_mesh.shadow_mesh.as_mut().unwrap();
 
                 if tgt_mesh.surfaces.len() != 1 {
                     println!(
@@ -212,8 +212,8 @@ impl ModelData {
                 bounds = bounds.union(&calc_bbox(&src_data.positions));
 
                 let (vbuf, ibuf) = generate_buffers(src_data, tgt_vertex_header);
-                lod_mesh.cpu_vdata = vbuf;
-                lod_mesh.cpu_idata = ibuf;
+                lod_mesh.shadow_vbuf = vbuf;
+                lod_mesh.shadow_ibuf = ibuf;
             }
         }
 

@@ -8,7 +8,7 @@ const SHADER_0UV: &str = include_str!("shad_0uv.wgsl");
 const SHADER_1UV: &str = include_str!("shad_1uv.wgsl");
 const TEX_UVCHECK: &[u8] = include_bytes!("../../../../../assets/tex_uvcheck.png");
 
-pub struct GpuMesh {
+pub struct RenderMesh {
     pub vbufs: Vec<wgpu::Buffer>,
     pub ibuf: wgpu::Buffer,
     pub surfaces: Vec<v_types::Surface>,
@@ -134,7 +134,7 @@ pub const fn gpu_vbuf_layout<'a>(
     }
 }
 
-pub fn gpu_geom_pipelines(
+pub fn render_pipelines(
     render_state: &RenderState,
     smesh: &v_types::StaticMesh,
     common_bgl: &wgpu::BindGroupLayout,
@@ -160,7 +160,7 @@ pub fn gpu_geom_pipelines(
 
     let mut gpu_pipelines: HashMap<u16, wgpu::RenderPipeline> = HashMap::new();
     for mesh in &smesh.lod_meshes {
-        let geometry = &mesh.gpu_geometry;
+        let geometry = &mesh.mesh;
 
         for surf in &geometry.surfaces {
             if gpu_pipelines.contains_key(&surf.material) {
@@ -221,18 +221,18 @@ pub fn gpu_geom_pipelines(
     gpu_pipelines
 }
 
-pub fn gpu_geom_lods(
+pub fn render_geom_lods(
     device: &wgpu::Device,
     smesh: &v_types::StaticMesh,
-    gpu_buffers: &[(Vec<&[u8]>, &[u8])],
-) -> Vec<GpuMesh> {
-    assert_eq!(gpu_buffers.len(), smesh.lod_meshes.len());
+    buffers: &[(Vec<&[u8]>, &[u8])],
+) -> Vec<RenderMesh> {
+    assert_eq!(buffers.len(), smesh.lod_meshes.len());
 
     smesh
         .lod_meshes
         .iter()
         .enumerate()
-        .zip(gpu_buffers.iter())
+        .zip(buffers.iter())
         .map(|((i, lod), (vbuf_slices, ibuf_slice))| {
             let vbufs = vbuf_slices
                 .iter()
@@ -252,10 +252,10 @@ pub fn gpu_geom_lods(
                 usage: wgpu::BufferUsages::INDEX,
             });
 
-            GpuMesh {
+            RenderMesh {
                 vbufs,
                 ibuf,
-                surfaces: lod.gpu_geometry.surfaces.clone(),
+                surfaces: lod.mesh.surfaces.clone(),
             }
         })
         .collect()

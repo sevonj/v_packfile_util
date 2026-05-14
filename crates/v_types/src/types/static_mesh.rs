@@ -160,63 +160,59 @@ impl StaticMesh {
 
         align_pad(w, data_offset, 16)?;
         for lod in &self.lod_meshes {
-            w.write_all(&lod.gpu_geometry.header.to_le_bytes())?;
+            w.write_all(&lod.mesh.header.to_le_bytes())?;
             *data_offset += size_of::<MeshHeader>();
         }
         for lod in &self.lod_meshes {
-            if let Some(cpu_geom) = &lod.cpu_geometry {
-                w.write_all(&cpu_geom.header.to_le_bytes())?;
+            if let Some(shadow_mesh) = &lod.shadow_mesh {
+                w.write_all(&shadow_mesh.header.to_le_bytes())?;
                 *data_offset += size_of::<MeshHeader>();
             }
         }
         for lod in &self.lod_meshes {
-            {
-                let gpu_geom = &lod.gpu_geometry;
-                for surf in &gpu_geom.surfaces {
-                    w.write_all(&surf.to_le_bytes())?;
-                    *data_offset += size_of::<Surface>();
-                }
+            let mesh = &lod.mesh;
+            for surf in &mesh.surfaces {
+                w.write_all(&surf.to_le_bytes())?;
+                *data_offset += size_of::<Surface>();
             }
 
-            if let Some(cpu_geom) = &lod.cpu_geometry {
-                for surf in &cpu_geom.surfaces {
+            if let Some(shadow_mesh) = &lod.shadow_mesh {
+                for surf in &shadow_mesh.surfaces {
                     w.write_all(&surf.to_le_bytes())?;
                     *data_offset += size_of::<Surface>();
                 }
             }
         }
         for lod in &self.lod_meshes {
-            {
-                let gpu_geom = &lod.gpu_geometry;
+            let mesh = &lod.mesh;
+            align_pad(w, data_offset, 4)?;
+            w.write_all(&mesh.index_header.to_le_bytes())?;
+            *data_offset += size_of::<IndexBuffer>();
+
+            for vertex_header in &mesh.vertex_headers {
+                w.write_all(&vertex_header.to_le_bytes())?;
+                *data_offset += size_of::<VertexBuffer>();
+            }
+
+            if let Some(shadow_mesh) = &lod.shadow_mesh {
                 align_pad(w, data_offset, 4)?;
-                w.write_all(&gpu_geom.index_header.to_le_bytes())?;
+                w.write_all(&shadow_mesh.index_header.to_le_bytes())?;
                 *data_offset += size_of::<IndexBuffer>();
 
-                for vertex_header in &gpu_geom.vertex_headers {
+                for vertex_header in &shadow_mesh.vertex_headers {
                     w.write_all(&vertex_header.to_le_bytes())?;
                     *data_offset += size_of::<VertexBuffer>();
                 }
             }
 
-            if let Some(cpu_geom) = &lod.cpu_geometry {
-                align_pad(w, data_offset, 4)?;
-                w.write_all(&cpu_geom.index_header.to_le_bytes())?;
-                *data_offset += size_of::<IndexBuffer>();
-
-                for vertex_header in &cpu_geom.vertex_headers {
-                    w.write_all(&vertex_header.to_le_bytes())?;
-                    *data_offset += size_of::<VertexBuffer>();
-                }
-            }
-
-            if lod.cpu_geometry.is_some() {
+            if lod.shadow_mesh.is_some() {
                 align_pad(w, data_offset, 16)?;
-                w.write_all(&lod.cpu_vdata)?;
-                *data_offset += lod.cpu_vdata.len();
+                w.write_all(&lod.shadow_vbuf)?;
+                *data_offset += lod.shadow_vbuf.len();
 
                 align_pad(w, data_offset, 16)?;
-                w.write_all(&lod.cpu_idata)?;
-                *data_offset += lod.cpu_idata.len();
+                w.write_all(&lod.shadow_ibuf)?;
+                *data_offset += lod.shadow_ibuf.len();
             }
         }
 
@@ -229,16 +225,16 @@ impl StaticMesh {
         let mut out = String::new();
 
         out += "# v_modelview StaticMesh dump\n";
-        if self.mesh_header.has_cpu_geometry() {
-            out += "# INFO: CPU file has geometry.\n";
+        if self.mesh_header.has_shadow_meshes() {
+            out += "# INFO: Model has shadow mesh.\n";
         } else {
-            out += "# INFO: CPU file doesn't have geometry.\n";
+            out += "# INFO: Model doesn't have shadow mesh.\n";
         }
         if separate_surfaces {
             out += "# INFO: separate_surfaces enabled. Every surface is a separate object.\n";
         }
         if g_smesh.is_none() {
-            out += "# WARNING: GPU file not provided. Dumping only CPU file contents.\n";
+            out += "# WARNING: GPU file not loaded. Dumping only shadow meshes.\n";
         }
 
         fn write_vertices(out: &mut String, vhead: &super::VertexBuffer, vbuf: &[u8]) {
@@ -287,29 +283,29 @@ impl StaticMesh {
             }
         }
 
-        let gpu_buffers = g_smesh.map(|g_smesh| self.gpu_buffers(g_smesh).unwrap());
-        if let Some(gpu_buffers) = &gpu_buffers {
-            assert_eq!(gpu_buffers.len(), self.lod_meshes.len());
+        let buffers = g_smesh.map(|g_smesh| self.render_buffers(g_smesh).unwrap());
+        if let Some(buffers) = &buffers {
+            assert_eq!(buffers.len(), self.lod_meshes.len());
         }
 
         let mut base_index = 1;
         for (lod, mesh) in self.lod_meshes.iter().enumerate() {
-            if let Some(gpu_buffers) = &gpu_buffers {
-                let (vbufs, ibuf) = &gpu_buffers[lod];
-                let geom = &mesh.gpu_geometry;
+            if let Some(buffers) = &buffers {
+                let (vbufs, ibuf) = &buffers[lod];
+                let mesh = &mesh.mesh;
 
                 if !separate_surfaces {
-                    out += &format!("o lod{lod}_gpu\n");
+                    out += &format!("o lod_{lod}\n");
                 }
 
-                for (i, surf) in geom.surfaces.iter().enumerate() {
+                for (i, surf) in mesh.surfaces.iter().enumerate() {
                     if separate_surfaces {
-                        out += &format!("o lod{lod}_gpu_surf{i}\n");
+                        out += &format!("o lod_{lod}_surf{i}\n");
                     }
                     let mat_name = self.matlib.materials[surf.material as usize].material_hash;
                     out += &format!("usemtl mat_{mat_name:08X}\n");
 
-                    let vhead = &geom.vertex_headers[surf.vbuf as usize];
+                    let vhead = &mesh.vertex_headers[surf.vbuf as usize];
                     let vbuf = vbufs[surf.vbuf as usize];
                     write_vertices(&mut out, vhead, vbuf);
                     write_indices(&mut out, base_index, surf, ibuf);
@@ -317,21 +313,21 @@ impl StaticMesh {
                 }
             }
 
-            if let Some(geom) = &mesh.cpu_geometry {
+            if let Some(shadow_mesh) = &mesh.shadow_mesh {
                 if !separate_surfaces {
-                    out += &format!("o lod{lod}_cpu\n");
+                    out += &format!("o lod_{lod}_shadow\n");
                 }
 
-                let vbuf = &mesh.cpu_vdata;
-                let ibuf = &mesh.cpu_idata;
-                for (i, surf) in geom.surfaces.iter().enumerate() {
+                let vbuf = &mesh.shadow_vbuf;
+                let ibuf = &mesh.shadow_ibuf;
+                for (i, surf) in shadow_mesh.surfaces.iter().enumerate() {
                     if separate_surfaces {
-                        out += &format!("o lod{lod}_cpu_surf{i}\n");
+                        out += &format!("o lod_{lod}_shadow_surf{i}\n");
                     }
                     let mat_name = self.matlib.materials[surf.material as usize].material_hash;
                     out += &format!("usemtl mat_{mat_name:08X}\n");
 
-                    let vhead = &geom.vertex_headers[surf.vbuf as usize];
+                    let vhead = &shadow_mesh.vertex_headers[surf.vbuf as usize];
                     write_vertices(&mut out, vhead, vbuf);
                     write_indices(&mut out, base_index, surf, ibuf);
                     base_index += vhead.num_vertices as usize;
@@ -344,7 +340,7 @@ impl StaticMesh {
 
     /// Return: vec<(vbufs, ibuf)>
     #[allow(clippy::type_complexity)]
-    pub fn gpu_buffers<'a>(
+    pub fn render_buffers<'a>(
         &self,
         buf: &'a [u8],
     ) -> Result<Vec<(Vec<&'a [u8]>, &'a [u8])>, VolitionError> {
@@ -353,7 +349,7 @@ impl StaticMesh {
         for lod_mesh in &self.lod_meshes {
             align(&mut offset, 16);
             let mut vbufs = vec![];
-            for vertex_head in &lod_mesh.gpu_geometry.vertex_headers {
+            for vertex_head in &lod_mesh.mesh.vertex_headers {
                 let len = vertex_head.num_vertices as usize * vertex_head.stride as usize;
                 let end = offset + len;
                 vbufs.push(&buf[offset..end]);
@@ -361,7 +357,7 @@ impl StaticMesh {
             }
 
             align(&mut offset, 16);
-            let len = lod_mesh.gpu_geometry.index_header.num_indices as usize * 2;
+            let len = lod_mesh.mesh.index_header.num_indices as usize * 2;
             let end = offset + len;
             datas.push((vbufs, &buf[offset..end]));
             offset += len;

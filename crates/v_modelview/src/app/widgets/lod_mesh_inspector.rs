@@ -104,26 +104,23 @@ fn header_ui(ui: &mut egui::Ui, header: &LodMeshHeader) {
 
 fn lods_ui(ui: &mut egui::Ui, meshes: &[LodMeshData]) {
     for (i, mesh) in meshes.iter().enumerate() {
-        CollapsingHeader::new(i.to_string())
-            .show(ui, |ui| {
-                ui.scope_builder(UiBuilder::new().id_salt("gpu"), |ui| {
-                    ui.weak("Geometry (GPU)");
-                    geom_ui(ui, &mesh.gpu_geometry);
-                });
+        CollapsingHeader::new(i.to_string()).show(ui, |ui| {
+            ui.scope_builder(UiBuilder::new().id_salt("mesh"), |ui| {
+                ui.weak("Mesh");
+                geom_ui(ui, &mesh.mesh);
+            });
 
-                ui.separator();
+            ui.separator();
 
-                ui.scope_builder(UiBuilder::new().id_salt("cpu"), |ui| {
-                    ui.weak("Geometry (CPU)");
-                    let Some(data) = &mesh.cpu_geometry else {
-                        ui.label("Doesn't exist");
-                        return;
-                    };
-                    geom_ui(ui, data);
-                });
-            })
-            .header_response
-            .on_disabled_hover_text("Doesn't exist");
+            ui.scope_builder(UiBuilder::new().id_salt("shadowmesh"), |ui| {
+                ui.weak("Shadow Mesh");
+                let Some(data) = &mesh.shadow_mesh else {
+                    ui.label("Doesn't exist");
+                    return;
+                };
+                geom_ui(ui, data);
+            });
+        });
     }
 }
 
