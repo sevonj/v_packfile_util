@@ -34,6 +34,33 @@ impl AABB {
     pub const fn is_nan(&self) -> bool {
         self.min.is_nan() || self.max.is_nan()
     }
+
+    pub const fn union(&self, other: &Self) -> Self {
+        Self {
+            min: Vector {
+                x: self.min.x.min(other.min.x),
+                y: self.min.y.min(other.min.y),
+                z: self.min.z.min(other.min.z),
+            },
+            max: Vector {
+                x: self.max.x.max(other.max.x),
+                y: self.max.y.max(other.max.y),
+                z: self.max.z.max(other.max.z),
+            },
+        }
+    }
+
+    pub fn center(&self) -> Vector {
+        self.min + self.size() / 2.0
+    }
+
+    pub fn size(&self) -> Vector {
+        self.max - self.min
+    }
+
+    pub fn radius(&self) -> f32 {
+        (self.size() / 2.0).length()
+    }
 }
 
 #[cfg(test)]

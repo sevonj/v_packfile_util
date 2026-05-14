@@ -17,7 +17,6 @@ impl VModelViewer {
             .show_inside(ui, |ui| {
                 ui.horizontal(|ui| {
                     self.file_menu(ui);
-                    self.export_menu(ui);
 
                     ui.separator();
 
@@ -34,8 +33,21 @@ impl VModelViewer {
 
     fn file_menu(&mut self, ui: &mut Ui) {
         ui.menu_button("File", |ui| {
+            let has_model = self.model_data.is_some();
+            let fully_loaded = self
+                .model_data
+                .as_ref()
+                .is_some_and(|model_data| model_data.g_smesh.is_some());
+
             if ui.add(Button::new("Open")).clicked() {
                 self.prompt_open_file();
+            }
+
+            if ui
+                .add_enabled(fully_loaded, Button::new("Save As"))
+                .clicked()
+            {
+                self.prompt_save();
             }
 
             if ui
@@ -47,24 +59,8 @@ impl VModelViewer {
 
             ui.separator();
 
-            if ui.add(Button::new("Quit")).clicked() {
-                ui.send_viewport_cmd(egui::ViewportCommand::Close);
-            }
-        });
-    }
-
-    fn export_menu(&mut self, ui: &mut Ui) {
-        ui.menu_button("Export", |ui| {
-            if !self.is_file_open() {
-                ui.disable();
-            }
-
-            let has_cpu_geom = self
-                .model_data
-                .as_ref()
-                .is_some_and(|model_data| model_data.smesh.mesh_header.has_cpu_geometry());
             if ui
-                .add_enabled(has_cpu_geom, Button::new("Wavefront"))
+                .add_enabled(has_model, Button::new("Dump Wavefront"))
                 .on_hover_text("Very lossy.")
                 .clicked()
             {
@@ -72,11 +68,27 @@ impl VModelViewer {
             }
 
             if ui
-                .add_enabled(has_cpu_geom, Button::new("Wavefront Separate"))
+                .add_enabled(has_model, Button::new("Dump Wavefront Separate"))
                 .on_hover_text("Very lossy. Export each surface as a separate object.")
                 .clicked()
             {
                 self.prompt_dump_cpu(true);
+            }
+
+            ui.separator();
+
+            if ui
+                .add_enabled(has_model, Button::new("Replace Geometry"))
+                .on_hover_text("This is very finicky and unfinished.")
+                .clicked()
+            {
+                self.prompt_replace_with_gltf();
+            }
+
+            ui.separator();
+
+            if ui.add(Button::new("Quit")).clicked() {
+                ui.send_viewport_cmd(egui::ViewportCommand::Close);
             }
         });
     }

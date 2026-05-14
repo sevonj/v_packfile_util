@@ -3,6 +3,9 @@ mod style;
 mod ui;
 mod widgets;
 
+use std::fs::File;
+use std::io::BufWriter;
+use std::io::Write;
 use std::path::PathBuf;
 
 use eframe::App;
@@ -16,25 +19,10 @@ use rfd::FileDialog;
 use v_types::StaticMesh;
 use v_types::VolitionError;
 
-pub struct ModelData {
-    pub smesh: StaticMesh,
-    pub g_smesh: Option<Vec<u8>>,
-    pub file_path: PathBuf,
-}
-
-impl ModelData {
-    pub fn try_load_g_smesh(&mut self) {
-        let Some(cpu_ext) = self.file_path.extension().and_then(|e| e.to_str()) else {
-            return;
-        };
-        let file_path = self.file_path.with_extension(format!("g_{cpu_ext}"));
-        self.g_smesh = std::fs::read(file_path).ok();
-    }
-}
-
 use crate::app::ui::ModelView;
 use crate::app::widgets::LogView;
 use crate::app::widgets::StatusPage;
+use crate::model_data::ModelData;
 use data::AppState;
 use data::AppTab;
 
@@ -72,6 +60,97 @@ impl VModelViewer {
             return;
         };
         self.try_open_model(file_path);
+    }
+
+    fn prompt_save(&mut self) {
+        let Some(model_data) = &self.model_data else {
+            return;
+        };
+
+        let Some(g_smesh) = &model_data.g_smesh else {
+            return;
+        };
+
+        let Some(cpu_path) = FileDialog::new()
+            .set_file_name(
+                model_data
+                    .file_path
+                    .with_extension("obj")
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy(),
+            )
+            .add_filter("SR2 Model Files", &["cmesh_pc", "smesh_pc"])
+            .save_file()
+        else {
+            return;
+        };
+
+        let cpu_ext = cpu_path
+            .extension()
+            .and_then(|p| p.to_str())
+            .unwrap_or("smesh_pc");
+        let gpu_path = cpu_path.with_extension(format!("g_{cpu_ext}"));
+
+        let cpu_file = match File::create(cpu_path) {
+            Ok(ok) => ok,
+            Err(e) => {
+                self.log_err(&e.into());
+                return;
+            }
+        };
+        let gpu_file = match File::create(gpu_path) {
+            Ok(ok) => ok,
+            Err(e) => {
+                self.log_err(&e.into());
+                return;
+            }
+        };
+
+        let mut cw = BufWriter::new(cpu_file);
+        if let Err(e) = model_data.smesh.write(&mut cw, &mut 0) {
+            self.log_err(&e.into());
+            return;
+        }
+        if let Err(e) = cw.flush() {
+            self.log_err(&e.into());
+            return;
+        }
+
+        let mut gw = BufWriter::new(gpu_file);
+        if let Err(e) = gw.write_all(g_smesh) {
+            self.log_err(&e.into());
+            return;
+        }
+        if let Err(e) = gw.flush() {
+            self.log_err(&e.into());
+        }
+    }
+
+    fn prompt_replace_with_gltf(&mut self) {
+        let Some(file_path) = FileDialog::new()
+            .add_filter("GLTF Binary", &["glb"])
+            .pick_file()
+        else {
+            return;
+        };
+
+        self.replace_with_gltf(file_path);
+    }
+
+    fn replace_with_gltf(&mut self, file_path: PathBuf) {
+        let Some(model_data) = self.model_data.as_mut() else {
+            return;
+        };
+        let (document, buffers, _images) = match gltf::import(file_path) {
+            Ok(ok) => ok,
+            Err(e) => {
+                self.log_text(e.to_string());
+                return;
+            }
+        };
+        model_data.replace_with_gltf(&document, &buffers);
+        self.model_view = None;
     }
 
     fn prompt_dump_cpu(&mut self, separate_surfaces: bool) {
@@ -194,17 +273,20 @@ impl App for VModelViewer {
             });
 
         ui.input(|i| {
-            //let Some(file) = i.raw.dropped_files.first() else {
-            //    return;
-            //};
-            //let Some(file_path) = file.path.clone() else {
-            //    return;
-            //};
+            let Some(file) = i.raw.dropped_files.first() else {
+                return;
+            };
+            let Some(file_path) = file.path.clone() else {
+                return;
+            };
+            let Some(ext) = file_path.extension().and_then(|e| e.to_str()) else {
+                return;
+            };
 
-            for file in &i.raw.dropped_files {
-                if let Some(file_path) = file.path.clone() {
-                    self.try_open_model(file_path);
-                }
+            match ext {
+                "smesh_pc" | "cmesh_pc" => self.try_open_model(file_path),
+                "glb" => self.replace_with_gltf(file_path),
+                _ => (),
             }
         });
     }

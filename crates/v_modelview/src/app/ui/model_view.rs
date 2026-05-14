@@ -80,7 +80,7 @@ impl ModelView {
             angle_y: 0.0,
             angle_x: 0.0,
             spin: true,
-            zoom: 1.0 / (radius * 4.0),
+            zoom: (1.0 / (radius * 4.0)).clamp(0.1, 20.0),
             camera_pos,
             last_instant: Instant::now(),
             last_touch: Instant::now() - Duration::from_secs(SPIN_ENABLE_DELAY),
