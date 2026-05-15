@@ -30,7 +30,7 @@ jobs:
       - name: Cargo plugins
         run: cargo install --locked cargo-about --features=cli
       - name: Generate licenses
-        run: python3 tools/generate_licenses.py
+        run: python3 repo-tools/generate_licenses.py
       - name: Add targets
         run: rustup target add x86_64-unknown-linux-gnu && rustup target add
           x86_64-pc-windows-gnu
@@ -44,7 +44,7 @@ jobs:
             target/x86_64-unknown-linux-gnu/release/v_packer,
             target/x86_64-pc-windows-gnu/release/v_packer.exe,
             target/x86_64-unknown-linux-gnu/release/v_modelview,
-            target/x86_64-pc-windows-gnu/release/v_modelview.exe,
+            target/x86_64-pc-windows-gnu/release/v_modelview.exe
           token: ${{ secrets.GITHUB_TOKEN }}
           prerelease: ${{ env.PRERELEASE }}
           body: "Release contains binaries for Linux and Windows."
