@@ -6,7 +6,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::collections::VecDeque;
+use crate::app::data::Logger;
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppTab {
@@ -26,7 +26,7 @@ impl std::fmt::Display for AppTab {
 
 #[derive(Default)]
 pub struct AppState {
-    pub log: VecDeque<String>,
+    pub logger: Logger,
     pub tab: AppTab,
     pub show_about: bool,
     pub show_legal: bool,

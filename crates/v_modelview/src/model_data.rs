@@ -15,6 +15,8 @@ use v_types::Vector;
 use v_types::VertexBuffer;
 use v_types::util::*;
 
+use crate::app::Logger;
+
 pub struct ModelData {
     pub smesh: StaticMesh,
     pub g_smesh: Option<Vec<u8>>,
@@ -22,15 +24,26 @@ pub struct ModelData {
 }
 
 impl ModelData {
-    pub fn try_load_g_smesh(&mut self) {
+    pub fn try_load_g_smesh(&mut self, logger: &mut Logger) {
         let Some(cpu_ext) = self.file_path.extension().and_then(|e| e.to_str()) else {
+            logger.log(format!(
+                "Couldn't find file extension in {:?}",
+                self.file_path
+            ));
             return;
         };
         let file_path = self.file_path.with_extension(format!("g_{cpu_ext}"));
         self.g_smesh = std::fs::read(file_path).ok();
     }
 
-    pub fn replace_with_gltf(&mut self, document: &gltf::Document, buffers: &[gltf::buffer::Data]) {
+    pub fn replace_with_gltf(
+        &mut self,
+        document: &gltf::Document,
+        buffers: &[gltf::buffer::Data],
+        logger: &mut Logger,
+    ) {
+        logger.log("Attempting to replace geometry from gltf...");
+
         let mut new_smesh = self.smesh.clone();
 
         let mut lod_nodes_map = HashMap::new();
@@ -39,36 +52,36 @@ impl ModelData {
         for scene in document.scenes() {
             for node in scene.nodes() {
                 let Some(name) = node.name() else {
-                    println!("WARNING: ignoring unnamed node");
+                    logger.log("WARNING: ignoring unnamed node");
                     continue;
                 };
                 let mut split = name.split("_");
                 if split.next().is_none_or(|s| s != "lod") {
-                    println!("WARNING: ignoring unrecognized node: {name:?}");
+                    logger.log(format!("WARNING: ignoring unrecognized node: {name:?}"));
                     continue;
                 };
                 let Some(lod_level) = split.next().and_then(|s| s.parse::<usize>().ok()) else {
-                    println!("ERROR: couldn't parse lod level from {name:?}");
+                    logger.log(format!("ERROR: couldn't parse lod level from {name:?}"));
                     return;
                 };
                 match split.next() {
                     None => {
                         if lod_nodes_map.insert(lod_level, node).is_some() {
-                            println!("ERROR: repeat lod: {name:?}");
+                            logger.log(format!("ERROR: repeat lod: {name:?}"));
                             return;
                         }
                     }
                     Some("shadow") => {
                         if split.next().is_some() {
-                            println!("ERROR: couldn't parse node type {name:?}");
+                            logger.log(format!("ERROR: couldn't parse node type {name:?}"));
                             return;
                         } else if shadow_lod_nodes_map.insert(lod_level, node).is_some() {
-                            println!("ERROR: repeat lod: {name:?}");
+                            logger.log(format!("ERROR: repeat lod: {name:?}"));
                             return;
                         }
                     }
                     _ => {
-                        println!("ERROR: couldn't parse node type {name:?}");
+                        logger.log(format!("ERROR: couldn't parse node type {name:?}"));
                         return;
                     }
                 }
@@ -77,13 +90,15 @@ impl ModelData {
         let has_shadow_lods = !shadow_lod_nodes_map.is_empty();
 
         if has_shadow_lods && shadow_lod_nodes_map.len() != lod_nodes_map.len() {
-            println!("ERROR: number of shadow lods must match lods");
+            logger.log("ERROR: number of shadow lods must match lods");
             return;
         }
         let mut lod_nodes = vec![];
         for i in 0..lod_nodes_map.len() {
             let Some(node) = lod_nodes_map.get(&i) else {
-                println!("ERROR: failed to get node for lod {i:?}. Did you number them correctly?");
+                logger.log(format!(
+                    "ERROR: failed to get node for lod {i:?}. Did you number them correctly?"
+                ));
                 return;
             };
             lod_nodes.push(node);
@@ -91,28 +106,28 @@ impl ModelData {
         let mut shadow_lod_nodes = vec![];
         for i in 0..shadow_lod_nodes_map.len() {
             let Some(node) = shadow_lod_nodes_map.get(&i) else {
-                println!(
+                logger.log(format!(
                     "ERROR: failed to get node for shadow lod {i:?}. Did you number them correctly?"
-                );
+                ));
                 return;
             };
             shadow_lod_nodes.push(node);
         }
 
         if lod_nodes.len() != new_smesh.lod_meshes.len() {
-            println!(
+            logger.log(format!(
                 "ERROR: GLTF has different number of lods than target: {} vs {}",
                 lod_nodes.len(),
                 new_smesh.lod_meshes.len()
-            );
+            ));
             return;
         }
 
         if !has_shadow_lods && new_smesh.mesh_header.has_shadow_meshes() {
-            println!("ERROR: GLTF doesn't have shadow lods, but target does.");
+            logger.log("ERROR: GLTF doesn't have shadow lods, but target does.");
             return;
         } else if has_shadow_lods && !new_smesh.mesh_header.has_shadow_meshes() {
-            println!("ERROR: GLTF has shadow lods, but target doesn't.");
+            logger.log("ERROR: GLTF has shadow lods, but target doesn't.");
             return;
         }
 
@@ -134,32 +149,32 @@ impl ModelData {
             {
                 let tgt_mesh = &mut lod_mesh.mesh;
                 if tgt_mesh.surfaces.len() != 1 {
-                    println!(
+                    logger.log(format!(
                         "ERROR: Target mesh has {} surfs. Only 1 is supported.",
                         tgt_mesh.surfaces.len()
-                    );
+                    ));
                     return;
                 }
                 let tgt_surf = &mut tgt_mesh.surfaces[0];
                 if tgt_mesh.vertex_headers.len() != 1 {
-                    println!(
+                    logger.log(format!(
                         "ERROR: Target mesh has {} vertex buffers. Only 1 is supported.",
                         tgt_mesh.vertex_headers.len()
-                    );
+                    ));
                     return;
                 }
                 let tgt_vertex_header = &mut tgt_mesh.vertex_headers[0];
 
                 let Some(src_mesh) = lod_nodes[i].mesh() else {
-                    println!("ERROR: Source lod node has no mesh",);
+                    logger.log("ERROR: Source lod node has no mesh");
                     return;
                 };
 
                 if src_mesh.primitives().len() != 1 {
-                    println!(
+                    logger.log(format!(
                         "ERROR: Source mesh has {} surfs. Only 1 is supported.",
                         tgt_mesh.surfaces.len()
-                    );
+                    ));
                     return;
                 }
                 let src_prim = src_mesh.primitives().nth(0).unwrap();
@@ -184,32 +199,32 @@ impl ModelData {
                 let tgt_mesh = lod_mesh.shadow_mesh.as_mut().unwrap();
 
                 if tgt_mesh.surfaces.len() != 1 {
-                    println!(
+                    logger.log(format!(
                         "ERROR: Target mesh has {} surfs. Only 1 is supported.",
                         tgt_mesh.surfaces.len()
-                    );
+                    ));
                     return;
                 }
                 let tgt_surf = &mut tgt_mesh.surfaces[0];
                 if tgt_mesh.vertex_headers.len() != 1 {
-                    println!(
+                    logger.log(format!(
                         "ERROR: Target mesh has {} vertex buffers. Only 1 is supported.",
                         tgt_mesh.vertex_headers.len()
-                    );
+                    ));
                     return;
                 }
                 let tgt_vertex_header = &mut tgt_mesh.vertex_headers[0];
 
                 let Some(src_mesh) = shadow_lod_nodes[i].mesh() else {
-                    println!("ERROR: Source lod node has no mesh",);
+                    logger.log("ERROR: Source lod node has no mesh");
                     return;
                 };
 
                 if src_mesh.primitives().len() != 1 {
-                    println!(
+                    logger.log(format!(
                         "ERROR: Source mesh has {} surfs. Only 1 is supported.",
                         tgt_mesh.surfaces.len()
-                    );
+                    ));
                     return;
                 }
                 let src_prim = src_mesh.primitives().nth(0).unwrap();

@@ -34,6 +34,7 @@ use crate::app::widgets::StatusPage;
 use crate::model_data::ModelData;
 use data::AppState;
 use data::AppTab;
+pub use data::Logger;
 
 pub struct VModelViewer {
     state: AppState,
@@ -50,7 +51,7 @@ impl VModelViewer {
             model_data: None,
             model_view: None,
         };
-        this.log_text(String::from("Hello there!"));
+        this.state.logger.log(String::from("Hello there!"));
         this
     }
 
@@ -104,35 +105,35 @@ impl VModelViewer {
         let cpu_file = match File::create(cpu_path) {
             Ok(ok) => ok,
             Err(e) => {
-                self.log_err(&e.into());
+                self.state.logger.log(e);
                 return;
             }
         };
         let gpu_file = match File::create(gpu_path) {
             Ok(ok) => ok,
             Err(e) => {
-                self.log_err(&e.into());
+                self.state.logger.log(e);
                 return;
             }
         };
 
         let mut cw = BufWriter::new(cpu_file);
         if let Err(e) = model_data.smesh.write(&mut cw, &mut 0) {
-            self.log_err(&e.into());
+            self.state.logger.log(e);
             return;
         }
         if let Err(e) = cw.flush() {
-            self.log_err(&e.into());
+            self.state.logger.log(e);
             return;
         }
 
         let mut gw = BufWriter::new(gpu_file);
         if let Err(e) = gw.write_all(g_smesh) {
-            self.log_err(&e.into());
+            self.state.logger.log(e);
             return;
         }
         if let Err(e) = gw.flush() {
-            self.log_err(&e.into());
+            self.state.logger.log(e);
         }
     }
 
@@ -154,11 +155,11 @@ impl VModelViewer {
         let (document, buffers, _images) = match gltf::import(file_path) {
             Ok(ok) => ok,
             Err(e) => {
-                self.log_text(e.to_string());
+                self.state.logger.log(e.to_string());
                 return;
             }
         };
-        model_data.replace_with_gltf(&document, &buffers);
+        model_data.replace_with_gltf(&document, &buffers, &mut self.state.logger);
         self.model_view = None;
     }
 
@@ -188,21 +189,21 @@ impl VModelViewer {
         if !contents.is_empty()
             && let Err(e) = std::fs::write(file_path, contents.as_bytes())
         {
-            self.log_err(&e.into());
+            self.state.logger.log(e);
         }
     }
 
     fn try_open_model(&mut self, file_path: PathBuf) {
         if let Err(e) = self.open_model(file_path) {
-            self.log_err(&e);
+            self.state.logger.log(&e);
             //self.toast_err(e.to_string());
         }
     }
 
     fn open_model(&mut self, file_path: PathBuf) -> Result<(), VolitionError> {
-        self.log_text(format!("Opening {file_path:?}"));
-
         self.close_file();
+
+        self.state.logger.log(format!("Opening {file_path:?}"));
 
         let buf = std::fs::read(&file_path)?;
         let mut offset = 0;
@@ -218,27 +219,15 @@ impl VModelViewer {
             g_smesh: None,
             file_path,
         };
-        model_data.try_load_g_smesh();
+        model_data.try_load_g_smesh(&mut self.state.logger);
         self.model_data = Some(model_data);
         Ok(())
     }
 
     fn close_file(&mut self) {
-        self.log_text("Closing file".to_string());
+        self.state.logger.log("Closing file".to_string());
         self.model_data = None;
         self.model_view = None;
-    }
-
-    fn log_err(&mut self, e: &VolitionError) {
-        self.log_text(e.to_string())
-    }
-
-    fn log_text(&mut self, text: String) {
-        println!("{text}");
-        while self.state.log.len() > 99 {
-            self.state.log.pop_front();
-        }
-        self.state.log.push_back(text);
     }
 }
 
@@ -277,7 +266,7 @@ impl App for VModelViewer {
                     }
                 }
                 AppTab::Log => {
-                    ui.add(LogView::new(&self.state.log));
+                    ui.add(LogView::new(&self.state.logger));
                 }
             });
 

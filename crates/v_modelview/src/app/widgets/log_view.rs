@@ -6,20 +6,20 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::collections::VecDeque;
-
 use egui::CentralPanel;
 use egui::ScrollArea;
 use egui::Vec2b;
 use egui::Widget;
 
+use crate::app::Logger;
+
 pub struct LogView<'a> {
-    log: &'a VecDeque<String>,
+    logger: &'a Logger,
 }
 
 impl<'a> LogView<'a> {
-    pub fn new(log: &'a VecDeque<String>) -> Self {
-        Self { log }
+    pub fn new(logger: &'a Logger) -> Self {
+        Self { logger }
     }
 }
 
@@ -29,7 +29,10 @@ impl Widget for LogView<'_> {
             .show_inside(ui, |ui| {
                 ScrollArea::new(Vec2b::new(false, true)).show(ui, |ui| {
                     ui.vertical(|ui| {
-                        for line in self.log {
+                        for line in self.logger.lines().0 {
+                            ui.monospace(line);
+                        }
+                        for line in self.logger.lines().1 {
                             ui.monospace(line);
                         }
                     });

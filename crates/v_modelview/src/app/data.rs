@@ -7,6 +7,8 @@
  */
 
 mod app_state;
+mod logger;
 
 pub use app_state::AppState;
 pub use app_state::AppTab;
+pub use logger::Logger;
