@@ -13,6 +13,10 @@ use egui::Ui;
 
 use crate::VModelViewer;
 use crate::app::AppTab;
+use crate::app::shortcuts::SHORTCUT_FILE_CLOSE;
+use crate::app::shortcuts::SHORTCUT_FILE_OPEN;
+use crate::app::shortcuts::SHORTCUT_FILE_SAVE;
+use crate::app::shortcuts::SHORTCUT_QUIT;
 
 impl VModelViewer {
     pub(crate) fn menu_bar(&mut self, ui: &mut Ui) -> egui::Response {
@@ -46,19 +50,33 @@ impl VModelViewer {
                 .as_ref()
                 .is_some_and(|model_data| model_data.g_smesh.is_some());
 
-            if ui.add(Button::new("Open")).clicked() {
+            if ui
+                .add(
+                    Button::new("Open")
+                        .shortcut_text(ui.ctx().format_shortcut(&SHORTCUT_FILE_OPEN)),
+                )
+                .clicked()
+            {
                 self.prompt_open_file();
             }
 
             if ui
-                .add_enabled(fully_loaded, Button::new("Save As"))
+                .add_enabled(
+                    fully_loaded,
+                    Button::new("Save As")
+                        .shortcut_text(ui.ctx().format_shortcut(&SHORTCUT_FILE_SAVE)),
+                )
                 .clicked()
             {
                 self.prompt_save();
             }
 
             if ui
-                .add_enabled(self.is_file_open(), Button::new("Close"))
+                .add_enabled(
+                    self.is_file_open(),
+                    Button::new("Close")
+                        .shortcut_text(ui.ctx().format_shortcut(&SHORTCUT_FILE_CLOSE)),
+                )
                 .clicked()
             {
                 self.close_file();
@@ -94,7 +112,10 @@ impl VModelViewer {
 
             ui.separator();
 
-            if ui.add(Button::new("Quit")).clicked() {
+            if ui
+                .add(Button::new("Quit").shortcut_text(ui.ctx().format_shortcut(&SHORTCUT_QUIT)))
+                .clicked()
+            {
                 ui.send_viewport_cmd(egui::ViewportCommand::Close);
             }
         });

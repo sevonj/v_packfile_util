@@ -7,6 +7,7 @@
  */
 
 mod data;
+mod shortcuts;
 mod style;
 mod ui;
 mod widgets;
@@ -286,6 +287,8 @@ impl App for VModelViewer {
                 self.about_legal_dialog(ui);
             }
         }
+
+        self.consume_shortcuts(ui);
 
         ui.input(|i| {
             let Some(file) = i.raw.dropped_files.first() else {
