@@ -23,6 +23,7 @@ impl VModelViewer {
             .show_inside(ui, |ui| {
                 ui.horizontal(|ui| {
                     self.file_menu(ui);
+                    self.help_menu(ui);
 
                     ui.separator();
 
@@ -95,6 +96,14 @@ impl VModelViewer {
 
             if ui.add(Button::new("Quit")).clicked() {
                 ui.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+        });
+    }
+
+    fn help_menu(&mut self, ui: &mut Ui) {
+        ui.menu_button("Help", |ui| {
+            if ui.add(Button::new("About")).clicked() {
+                self.state.show_about = true;
             }
         });
     }

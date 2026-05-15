@@ -3,6 +3,7 @@ name = "v_types"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 
 [features]
 # For CI tests. For obvious reasons, we can't include game data in the repo.

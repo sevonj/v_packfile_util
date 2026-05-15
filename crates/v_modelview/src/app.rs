@@ -280,6 +280,13 @@ impl App for VModelViewer {
                 }
             });
 
+        if self.state.show_about {
+            self.about_dialog(ui);
+            if self.state.show_legal {
+                self.about_legal_dialog(ui);
+            }
+        }
+
         ui.input(|i| {
             let Some(file) = i.raw.dropped_files.first() else {
                 return;

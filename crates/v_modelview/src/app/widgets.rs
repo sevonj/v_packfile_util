@@ -6,6 +6,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+mod action_row;
 mod float_display;
 mod lod_mesh_inspector;
 mod log_view;
@@ -14,6 +15,7 @@ mod static_mesh_inspector;
 mod status_page;
 mod vector_display;
 
+pub use action_row::ActionRow;
 pub use float_display::FloatDisplay;
 pub use lod_mesh_inspector::LodMeshInspector;
 pub use log_view::LogView;

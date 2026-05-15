@@ -28,4 +28,6 @@ impl std::fmt::Display for AppTab {
 pub struct AppState {
     pub log: VecDeque<String>,
     pub tab: AppTab,
+    pub show_about: bool,
+    pub show_legal: bool,
 }

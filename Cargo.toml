@@ -11,6 +11,7 @@ members = [
 version = "0.1.0"
 license = "MPL-2.0"
 edition = "2024"
+repository = "https://github.com/sevonj/v_utils"
 
 [workspace.dependencies]
 v_types = { path = "crates/v_types" }
