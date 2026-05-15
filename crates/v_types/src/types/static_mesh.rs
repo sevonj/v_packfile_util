@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: MPL-2.0
+// SPDX-FileCopyrightText: sevonj
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 use std::io::Write;
 
 use crate::IndexBuffer;
@@ -577,6 +585,7 @@ mod tests {
         assert_eq!(buf, hed.to_le_bytes());
     }
 
+    #[cfg(not(feature = "no_gamedata"))]
     #[test]
     fn test_parse_every_smesh() {
         // Unpacked meshes.vpp_pc
@@ -606,6 +615,7 @@ mod tests {
         assert_eq!(num_success, NUM_SMESH);
     }
 
+    #[cfg(not(feature = "no_gamedata"))]
     #[test]
     fn test_parse_every_smesh_reaches_end() {
         // Unpacked meshes.vpp_pc
@@ -638,6 +648,7 @@ mod tests {
         assert_eq!(num_failed, 0);
     }
 
+    #[cfg(not(feature = "no_gamedata"))]
     #[test]
     fn test_cycle_every_smesh() {
         // Unpacked meshes.vpp_pc
@@ -673,6 +684,7 @@ mod tests {
         assert_eq!(num_failed, 0);
     }
 
+    #[cfg(not(feature = "no_gamedata"))]
     #[test]
     fn test_cycle_every_smesh_to_end() {
         // Unpacked meshes.vpp_pc
@@ -707,6 +719,7 @@ mod tests {
         assert_eq!(num_failed, 0);
     }
 
+    #[cfg(not(feature = "no_gamedata"))]
     #[test]
     fn test_parse_every_cmesh() {
         // Unpacked meshes.vpp_pc

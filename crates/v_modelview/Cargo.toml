@@ -2,7 +2,7 @@
 name = "v_modelview"
 version.workspace = true
 edition.workspace = true
-license = "AGPL-3.0-or-later"
+license.workspace = true
 
 [dependencies]
 v_types = { workspace = true }

@@ -15,3 +15,8 @@ edition = "2024"
 [workspace.dependencies]
 v_types = { path = "crates/v_types" }
 v_commands = { path = "crates/v_commands" }
+
+
+[workspace.features]
+# For CI tests. For obvious reasons, we can't include game data in the repo.
+no_gamedata = []
