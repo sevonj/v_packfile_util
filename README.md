@@ -11,10 +11,6 @@ Miscellaneous SR2 tools.
 
 ## Developers
 
-Scratchmark is written in Rust and uses GTK4 and Libadwaita for UI.
-
-### License
-
 The project is licensed under MPL-2.0
 
 ### Continuous Integration
