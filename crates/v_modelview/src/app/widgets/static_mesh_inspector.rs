@@ -26,11 +26,11 @@ const IDX_W: f32 = 20.0;
 const SPACE: f32 = 8.0;
 
 pub struct StaticMeshInspector<'a> {
-    smesh: &'a StaticMesh,
+    smesh: &'a mut StaticMesh,
 }
 
 impl<'a> StaticMeshInspector<'a> {
-    pub fn new(smesh: &'a StaticMesh) -> Self {
+    pub fn new(smesh: &'a mut StaticMesh) -> Self {
         Self { smesh }
     }
 }
@@ -51,7 +51,7 @@ impl Widget for StaticMeshInspector<'_> {
             CollapsingHeader::new("Textures")
                 .enabled(has_textures)
                 .show(ui, |ui| {
-                    textures_ui(ui, &smesh.texture_flags, &smesh.texture_names);
+                    textures_ui(ui, &smesh.texture_flags, &mut smesh.texture_names);
                 })
                 .header_response
                 .on_disabled_hover_text("No textures");
@@ -198,7 +198,7 @@ fn header_ui(ui: &mut egui::Ui, header: &StaticMeshHeader) {
     });
 }
 
-fn textures_ui(ui: &mut egui::Ui, texture_flags: &[i32], texture_names: &[String]) {
+fn textures_ui(ui: &mut egui::Ui, texture_flags: &[i32], texture_names: &mut [String]) {
     assert_eq!(texture_flags.len(), texture_names.len());
 
     let num_textures = texture_flags.len();
@@ -230,7 +230,7 @@ fn textures_ui(ui: &mut egui::Ui, texture_flags: &[i32], texture_names: &[String
                 ui.monospace(format!("{:08X?}", flags));
             });
             row.col(|ui| {
-                ui.add(Label::new(&texture_names[idx]).wrap_mode(TextWrapMode::Truncate));
+                ui.text_edit_singleline(&mut texture_names[idx]);
             });
         });
     });

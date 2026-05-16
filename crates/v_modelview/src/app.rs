@@ -243,7 +243,7 @@ impl App for VModelViewer {
             .frame(Frame::NONE.fill(fill))
             .show_inside(ui, |ui| match self.state.tab {
                 AppTab::View => {
-                    if let Some(model_data) = &self.model_data {
+                    if let Some(model_data) = &mut self.model_data {
                         if self.model_view.is_none()
                             && let Some(render_state) = frame.wgpu_render_state()
                         {

@@ -100,7 +100,7 @@ impl ModelView {
         }
     }
 
-    pub fn ui(&mut self, ui: &mut Ui, model_data: &ModelData) {
+    pub fn ui(&mut self, ui: &mut Ui, model_data: &mut ModelData) {
         let rect = ui.available_rect_before_wrap();
 
         // paint
@@ -165,7 +165,7 @@ impl ModelView {
                             ScrollArea::vertical().show(ui, |ui| {
                                 ui.set_width(ui.available_width());
                                 ui.set_height(ui.available_height());
-                                ui.add(StaticMeshInspector::new(&model_data.smesh));
+                                ui.add(StaticMeshInspector::new(&mut model_data.smesh));
 
                                 // More comfortable scrolling
                                 ui.add_space(panel_h - 32.0);
