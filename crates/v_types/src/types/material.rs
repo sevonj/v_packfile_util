@@ -352,7 +352,7 @@ pub struct Material {
     pub num_textures: i16,
     pub unk_10: i16,
     pub unk_12: i16,
-    pub runtime_14: i32,
+    pub ptr_14: i32,
     /* Could be:
      * - num_constants u8
      * - max_constants u8
@@ -369,15 +369,13 @@ impl Material {
     }
 
     pub fn from_le_bytes(buf: &[u8; size_of::<Self>()]) -> Result<Self, VolitionError> {
-        let runtime_14 = read_i32_le(buf, 0x14);
-        // Usually, but not always?
-        // if runtime_14 != -1 {
-        //     return Err(VolitionError::UnexpectedValue {
-        //         field: "Material::runtime_14",
-        //         expected: -1,
-        //         got: runtime_14,
-        //     });
-        // }
+        let ptr_14 = read_i32_le(buf, 0x14);
+        if ![0, -1].contains(&ptr_14) {
+            return Err(VolitionError::UnexpectedValue {
+                desc: "Material::ptr_14 should be either 0 or -1",
+                got: ptr_14,
+            });
+        }
 
         Ok(Self {
             shader_hash: read_i32_le(buf, 0x0),
@@ -387,7 +385,7 @@ impl Material {
             num_textures: read_i16_le(buf, 0xe),
             unk_10: read_i16_le(buf, 0x10),
             unk_12: read_i16_le(buf, 0x12),
-            runtime_14,
+            ptr_14,
         })
     }
 
@@ -400,7 +398,7 @@ impl Material {
         bytes[0x0e..0x10].copy_from_slice(&self.num_textures.to_le_bytes());
         bytes[0x10..0x12].copy_from_slice(&self.unk_10.to_le_bytes());
         bytes[0x12..0x14].copy_from_slice(&self.unk_12.to_le_bytes());
-        bytes[0x14..0x18].copy_from_slice(&self.runtime_14.to_le_bytes());
+        bytes[0x14..0x18].copy_from_slice(&self.ptr_14.to_le_bytes());
         bytes
     }
 }
