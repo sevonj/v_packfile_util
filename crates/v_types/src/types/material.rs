@@ -369,7 +369,9 @@ impl Material {
     }
 
     pub fn from_le_bytes(buf: &[u8; size_of::<Self>()]) -> Result<Self, VolitionError> {
+        let num_unknown = read_i16_le(buf, 0xc);
         let ptr_14 = read_i32_le(buf, 0x14);
+
         if ![0, -1].contains(&ptr_14) {
             return Err(VolitionError::UnexpectedValue {
                 desc: "Material::ptr_14 should be either 0 or -1",
@@ -377,11 +379,24 @@ impl Material {
             });
         }
 
+        if num_unknown != 0 && ptr_14 != -1 {
+            return Err(VolitionError::UnexpectedValue {
+                desc: "Material::ptr_14 should be either -1 ",
+                got: ptr_14,
+            });
+        }
+        /* else if num_unknown == 0 && ptr_14 != 0 {
+            // Sometimes still -1, mostly cmesh
+            // Is the relationship just a coincidence or
+            // do some files get the stuff from elsewhere or what
+            // Does this even matter
+        } */
+
         Ok(Self {
             shader_hash: read_i32_le(buf, 0x0),
             material_hash: read_i32_le(buf, 0x4),
             flags: read_i32_le(buf, 0x8),
-            num_unknown: read_i16_le(buf, 0xc),
+            num_unknown,
             num_textures: read_i16_le(buf, 0xe),
             unk_10: read_i16_le(buf, 0x10),
             unk_12: read_i16_le(buf, 0x12),
