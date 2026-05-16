@@ -51,7 +51,7 @@ impl Widget for StaticMeshInspector<'_> {
             CollapsingHeader::new("Textures")
                 .enabled(has_textures)
                 .show(ui, |ui| {
-                    textures_ui(ui, &smesh.texture_flags, &mut smesh.texture_names);
+                    textures_ui(ui, &smesh.texture_addr_maybe, &mut smesh.texture_names);
                 })
                 .header_response
                 .on_disabled_hover_text("No textures");
@@ -198,10 +198,10 @@ fn header_ui(ui: &mut egui::Ui, header: &StaticMeshHeader) {
     });
 }
 
-fn textures_ui(ui: &mut egui::Ui, texture_flags: &[i32], texture_names: &mut [String]) {
-    assert_eq!(texture_flags.len(), texture_names.len());
+fn textures_ui(ui: &mut egui::Ui, texture_unk: &[i32], texture_names: &mut [String]) {
+    assert_eq!(texture_unk.len(), texture_names.len());
 
-    let num_textures = texture_flags.len();
+    let num_textures = texture_unk.len();
 
     let table_builder = TableBuilder::new(ui)
         .striped(true)
@@ -222,12 +222,12 @@ fn textures_ui(ui: &mut egui::Ui, texture_flags: &[i32], texture_names: &mut [St
     table_builder.body(|body| {
         body.rows(ROW_H, num_textures, |mut row| {
             let idx = row.index();
-            let flags = texture_flags[idx];
+            let unk = texture_unk[idx];
             row.col(|ui| {
                 ui.weak(format!("{idx}"));
             });
             row.col(|ui| {
-                ui.monospace(format!("{:08X?}", flags));
+                ui.monospace(format!("{:08X?}", unk));
             });
             row.col(|ui| {
                 ui.text_edit_singleline(&mut texture_names[idx]);

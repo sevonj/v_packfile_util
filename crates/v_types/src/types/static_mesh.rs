@@ -28,8 +28,7 @@ pub const MAX_BONES: u32 = 500;
 #[derive(Debug, Clone)]
 pub struct StaticMesh {
     pub header: StaticMeshHeader,
-    /// Probably. At least matches texture count.
-    pub texture_flags: Vec<i32>,
+    pub texture_addr_maybe: Vec<i32>,
     pub texture_names: Vec<String>,
     pub navpoints: Vec<StaticMeshNavpoint>,
     /// Maybe.
@@ -103,7 +102,7 @@ impl StaticMesh {
 
         Ok(Self {
             header,
-            texture_flags,
+            texture_addr_maybe: texture_flags,
             texture_names,
             navpoints,
             bone_indices,
@@ -127,7 +126,7 @@ impl StaticMesh {
         }
         *data_offset += 0x40;
 
-        for flag in &self.texture_flags {
+        for flag in &self.texture_addr_maybe {
             w.write_all(&flag.to_le_bytes())?;
             *data_offset += 4;
         }
