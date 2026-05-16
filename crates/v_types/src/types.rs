@@ -18,7 +18,7 @@ pub use aabb::AABB;
 pub use material::Material;
 pub use material::MaterialTextureEntry;
 pub use material::MaterialUnknown3;
-pub use material::MaterialsData;
+pub use material::MaterialsDeserialized;
 pub use material::MaterialsHeader;
 pub use mesh::IndexBuffer;
 pub use mesh::LodMeshData;

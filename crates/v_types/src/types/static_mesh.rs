@@ -11,7 +11,7 @@ use std::io::Write;
 use crate::IndexBuffer;
 use crate::LodMeshData;
 use crate::LodMeshHeader;
-use crate::MaterialsData;
+use crate::MaterialsDeserialized;
 use crate::MeshHeader;
 use crate::Quaternion;
 use crate::Surface;
@@ -34,7 +34,7 @@ pub struct StaticMesh {
     pub navpoints: Vec<StaticMeshNavpoint>,
     /// Maybe.
     pub bone_indices: Vec<i32>,
-    pub matlib: MaterialsData,
+    pub matlib: MaterialsDeserialized,
     pub mesh_header: LodMeshHeader,
     pub unk_20b: Option<[u8; 20]>,
     pub lod_meshes: Vec<LodMeshData>,
@@ -85,7 +85,7 @@ impl StaticMesh {
         }
 
         align(data_offset, 4);
-        let matlib = MaterialsData::from_data(buf, data_offset)?;
+        let matlib = MaterialsDeserialized::from_data(buf, data_offset)?;
 
         let mesh_header = LodMeshHeader::from_le_unsized(&buf[*data_offset..])?;
         *data_offset += size_of::<LodMeshHeader>();
