@@ -81,11 +81,17 @@ impl VModelViewer {
             return;
         };
 
+        let cpu_ext = model_data
+            .file_path
+            .extension()
+            .and_then(|p| p.to_str())
+            .unwrap_or("smesh_pc");
+
         let Some(cpu_path) = FileDialog::new()
             .set_file_name(
                 model_data
                     .file_path
-                    .with_extension("obj")
+                    .with_extension(cpu_ext)
                     .file_name()
                     .unwrap()
                     .to_string_lossy(),
